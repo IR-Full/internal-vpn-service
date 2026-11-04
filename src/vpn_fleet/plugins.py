@@ -1,5 +1,6 @@
 """Prepare only two official, checksum-pinned plugins; never execute downloaded code."""
 import hashlib
+import errno
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -108,6 +109,9 @@ def prepare_plugins(plugins, root):
             archive = archives / (plugin_id + "-" + lock["sha256"] + ".zip")
             fetch_archive(lock, archive)
             unpack(archive, staging, plugin_id, lock["version"])
+        # Public signed code is mounted into Grafana under a different UID. Its parent
+        # .state remains private; the mounted set itself must be readable/traversable.
+        staging.chmod(0o755)
         if destination.is_symlink():
             raise ValueError("Prepared plugin root must not be a symlink")
         if destination.exists():
@@ -116,7 +120,10 @@ def prepare_plugins(plugins, root):
         else:
             try:
                 os.rename(staging, destination)
-            except FileExistsError:
+            except OSError as exc:
+                if exc.errno not in (errno.EEXIST, errno.ENOTEMPTY) or destination.is_symlink():
+                    raise
                 if tree_hash(destination) != tree_hash(staging):
                     raise ValueError("Concurrent plugin preparation produced different files") from None
+        destination.chmod(0o755)
     return destination

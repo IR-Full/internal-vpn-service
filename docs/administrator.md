@@ -14,7 +14,7 @@ Ansible воспроизводит настройку уже приобретё�
 
 ## Контроллер и секреты
 
-Предпочтителен Linux/WSL-контроллер с Python 3.11+ и OpenSSH. Установить зависимости из `requirements.lock`, затем `pip install --no-deps -e .`. Для локальной разработки на Windows предоставлен Docker-инструментарий; интерактивный SSH/MFA удобнее выполнять из Linux/WSL. Секреты хранить на зашифрованном диске и в каталоге с правами владельца. Linux chmod на Docker bind mount NTFS не заменяет проверку Windows ACL.
+Для Ansible нужен Linux/WSL-контроллер с Python 3.12–3.14 и OpenSSH; локальные проверки выполнены на Python 3.12. Это требование закреплённого `ansible-core==2.21.6`, см. [официальную матрицу поддержки](https://docs.ansible.com/projects/ansible/latest/reference_appendices/release_and_maintenance.html). Сам CLI поддерживает Python 3.11+, но полный набор из `requirements.lock` требует указанной версии контроллера. Установить зависимости из `requirements.lock`, затем `pip install --no-deps -e .`. Для локальной разработки на Windows предоставлен Docker-инструментарий; интерактивный SSH/MFA удобнее выполнять из Linux/WSL. Секреты хранить на зашифрованном диске и в каталоге с правами владельца. Linux chmod на Docker bind mount NTFS не заменяет проверку Windows ACL.
 
 На Linux:
 
@@ -22,7 +22,7 @@ Ansible воспроизводит настройку уже приобретё�
 umask 077
 mkdir -p .state
 chmod 700 .state
-python -m venv .venv
+python3.12 -m venv .venv
 . .venv/bin/activate
 pip install -r requirements.lock
 pip install --no-deps -e .
