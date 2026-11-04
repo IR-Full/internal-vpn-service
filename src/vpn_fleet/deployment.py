@@ -2,12 +2,9 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import ipaddress
-import hashlib
 import json
 from pathlib import Path
 import secrets
-import re
-import time
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -16,18 +13,14 @@ from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 import yaml
 
 from .registry import FleetError, atomic_write, private_directory
+from .image_policy import validate_scan
 
 
 def validate_images(images: dict) -> None:
-    repositories = {"grafana": "grafana/grafana", "loki": "grafana/loki", "alloy": "grafana/alloy", "prometheus": "prom/prometheus"}
-    for name, repository in repositories.items():
-        if not re.fullmatch(re.escape(repository) + r"@sha256:[a-f0-9]{64}", images.get(name, "")):
-            raise FleetError("Runtime images must use reviewed official repositories and immutable digests")
-    digest = hashlib.sha256(json.dumps({k: images[k] for k in sorted(repositories)}, sort_keys=True).encode()).hexdigest()
-    if images.get("scan_status") != "passed" or images.get("scanned_images_sha256") != digest:
-        raise FleetError("Image security scan is missing/failed or does not match this exact image set")
-    if not 0 <= time.time() - images.get("scanned_epoch", 0) <= 7 * 86400:
-        raise FleetError("Image scan is older than seven days; rescan before deployment")
+    try:
+        validate_scan(images)
+    except (ValueError, TypeError, KeyError) as exc:
+        raise FleetError(str(exc) if type(exc) is ValueError else "Invalid image scan evidence") from None
 
 
 def pem(key) -> str:

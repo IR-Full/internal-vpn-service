@@ -51,6 +51,26 @@
     mode: '0600'
   register: alloy_config
 
+- name: Create immutable plugin set path on B
+  ansible.builtin.file:
+    path: "/opt/vpn-monitoring/plugins/{{ images.images_sha256 }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: monitoring_node | bool
+
+- name: Copy verified official signed plugins from the prepared controller tree
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../.state/grafana-plugins/sets/{{ images.grafana_plugins_sha256 }}/"
+    dest: "/opt/vpn-monitoring/plugins/{{ images.images_sha256 }}/"
+    owner: root
+    group: root
+    mode: preserve
+    directory_mode: '0755'
+  when: monitoring_node | bool
+  register: grafana_plugins_config
+
 - name: Place Grafana bootstrap secrets in root-controlled files readable by its service UID
   ansible.builtin.copy:
     content: "{{ item.value }}"
@@ -181,7 +201,7 @@
   ansible.builtin.command:
     argv: "{{ ['docker', 'compose', '-f', '/opt/vpn-monitoring/compose.yml', 'up', '-d', '--remove-orphans'] + (['--force-recreate'] if monitoring_recreate else []) }}"
   vars:
-    monitoring_recreate: "{{ telemetry_credentials.changed or alloy_config.changed or grafana_credentials.changed or monitoring_files.changed or contacts_config.changed or smtp_config.changed or monitoring_compose.changed }}"
+    monitoring_recreate: "{{ telemetry_credentials.changed or alloy_config.changed or grafana_plugins_config.changed or grafana_credentials.changed or monitoring_files.changed or contacts_config.changed or smtp_config.changed or monitoring_compose.changed }}"
   register: compose_up
   changed_when: "'Started' in compose_up.stderr or 'Created' in compose_up.stderr or 'Recreated' in compose_up.stderr"
 

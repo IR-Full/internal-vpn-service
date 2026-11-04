@@ -61,6 +61,10 @@ services:
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
       GF_SECURITY_DISABLE_GRAVATAR: "true"
       GF_LOG_LEVEL: warn
+      GF_PATHS_PLUGINS: /opt/grafana-plugins
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_PLUGINS_PREINSTALL_AUTO_UPDATE: "false"
+      GF_PLUGINS_PLUGIN_ADMIN_ENABLED: "false"
       GF_AUTH_DISABLE_LOGIN_FORM: "false"
 {% if alerting_settings.get('enabled', false) %}
       GF_SMTP_ENABLED: "true"
@@ -77,6 +81,7 @@ services:
       - /etc/vpn-service/grafana-password:/run/secrets/grafana-password:ro
       - /etc/vpn-service/grafana-secret-key:/run/secrets/grafana-secret-key:ro
       - grafana-data:/var/lib/grafana
+      - ./plugins/{{ images.images_sha256 }}:/opt/grafana-plugins:ro
 {% if alerting_settings.get('enabled', false) %}
       - /etc/vpn-service/smtp-host:/run/secrets/smtp-host:ro
       - /etc/vpn-service/smtp-user:/run/secrets/smtp-user:ro

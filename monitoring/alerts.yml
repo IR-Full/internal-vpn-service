@@ -6,7 +6,7 @@ groups:
   interval: 20s
   rules:
   - uid: vpn-stale
-    title: Node telemetry is stale
+    title: Node telemetry is stale or missing
     condition: B
     for: 1m
     noDataState: Alerting
@@ -15,8 +15,9 @@ groups:
     labels:
       service: private-vpn
     annotations:
-      summary: Node telemetry is stale
-      runbook_url: docs/runbooks.md
+      summary: Node telemetry is stale or missing
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
     data:
     - refId: A
       relativeTimeRange:
@@ -25,7 +26,8 @@ groups:
       datasourceUid: prometheus
       model:
         refId: A
-        expr: time() - vpn_probe_timestamp_seconds
+        expr: (max by(node)(time() - vpn_probe_timestamp_seconds) > bool 120) or on(node)
+          absent(vpn_probe_timestamp_seconds{node="vpn_a"}) or on(node) absent(vpn_probe_timestamp_seconds{node="vpn_b"})
         instant: true
         intervalMs: 20000
         maxDataPoints: 43200
@@ -36,21 +38,8 @@ groups:
       datasourceUid: __expr__
       model:
         refId: B
-        type: classic_conditions
-        conditions:
-        - type: query
-          query:
-            params:
-            - A
-          reducer:
-            type: last
-            params: []
-          evaluator:
-            type: gt
-            params:
-            - 120
-          operator:
-            type: and
+        type: math
+        expression: $A > 0
   - uid: vpn-interface
     title: VPN interface is down
     condition: B
@@ -62,7 +51,8 @@ groups:
       service: private-vpn
     annotations:
       summary: VPN interface is down
-      runbook_url: docs/runbooks.md
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
     data:
     - refId: A
       relativeTimeRange:
@@ -82,21 +72,8 @@ groups:
       datasourceUid: __expr__
       model:
         refId: B
-        type: classic_conditions
-        conditions:
-        - type: query
-          query:
-            params:
-            - A
-          reducer:
-            type: last
-            params: []
-          evaluator:
-            type: gt
-            params:
-            - 0
-          operator:
-            type: and
+        type: math
+        expression: $A > 0
   - uid: vpn-cpu
     title: CPU saturation
     condition: B
@@ -108,7 +85,8 @@ groups:
       service: private-vpn
     annotations:
       summary: CPU saturation
-      runbook_url: docs/runbooks.md
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
     data:
     - refId: A
       relativeTimeRange:
@@ -128,21 +106,8 @@ groups:
       datasourceUid: __expr__
       model:
         refId: B
-        type: classic_conditions
-        conditions:
-        - type: query
-          query:
-            params:
-            - A
-          reducer:
-            type: last
-            params: []
-          evaluator:
-            type: gt
-            params:
-            - 85
-          operator:
-            type: and
+        type: math
+        expression: $A > 85
   - uid: vpn-memory
     title: Memory pressure
     condition: B
@@ -154,7 +119,8 @@ groups:
       service: private-vpn
     annotations:
       summary: Memory pressure
-      runbook_url: docs/runbooks.md
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
     data:
     - refId: A
       relativeTimeRange:
@@ -174,21 +140,8 @@ groups:
       datasourceUid: __expr__
       model:
         refId: B
-        type: classic_conditions
-        conditions:
-        - type: query
-          query:
-            params:
-            - A
-          reducer:
-            type: last
-            params: []
-          evaluator:
-            type: gt
-            params:
-            - 85
-          operator:
-            type: and
+        type: math
+        expression: $A > 85
   - uid: vpn-disk
     title: Low host disk space
     condition: B
@@ -200,7 +153,8 @@ groups:
       service: private-vpn
     annotations:
       summary: Low host disk space
-      runbook_url: docs/runbooks.md
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
     data:
     - refId: A
       relativeTimeRange:
@@ -220,21 +174,8 @@ groups:
       datasourceUid: __expr__
       model:
         refId: B
-        type: classic_conditions
-        conditions:
-        - type: query
-          query:
-            params:
-            - A
-          reducer:
-            type: last
-            params: []
-          evaluator:
-            type: gt
-            params:
-            - 0.8
-          operator:
-            type: and
+        type: math
+        expression: $A > 0.8
   - uid: vpn-telemetry
     title: Telemetry ingestion gateway unavailable
     condition: B
@@ -246,7 +187,8 @@ groups:
       service: private-vpn
     annotations:
       summary: Telemetry ingestion gateway unavailable
-      runbook_url: docs/runbooks.md
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
     data:
     - refId: A
       relativeTimeRange:
@@ -266,21 +208,8 @@ groups:
       datasourceUid: __expr__
       model:
         refId: B
-        type: classic_conditions
-        conditions:
-        - type: query
-          query:
-            params:
-            - A
-          reducer:
-            type: last
-            params: []
-          evaluator:
-            type: gt
-            params:
-            - 0
-          operator:
-            type: and
+        type: math
+        expression: $A > 0
   - uid: vpn-backup
     title: Backup missing or older than 26 hours
     condition: B
@@ -292,7 +221,8 @@ groups:
       service: private-vpn
     annotations:
       summary: Backup missing or older than 26 hours
-      runbook_url: docs/runbooks.md
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
     data:
     - refId: A
       relativeTimeRange:
@@ -312,21 +242,76 @@ groups:
       datasourceUid: __expr__
       model:
         refId: B
-        type: classic_conditions
-        conditions:
-        - type: query
-          query:
-            params:
-            - A
-          reducer:
-            type: last
-            params: []
-          evaluator:
-            type: gt
-            params:
-            - 93600
-          operator:
-            type: and
+        type: math
+        expression: $A > 93600
+  - uid: vpn-certificate
+    title: Telemetry certificate expires within 30 days or cannot be read
+    condition: B
+    for: 5m
+    noDataState: Alerting
+    execErrState: Alerting
+    isPaused: false
+    labels:
+      service: private-vpn
+    annotations:
+      summary: Telemetry certificate expires within 30 days or cannot be read
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: 30 * 86400 - (vpn_telemetry_certificate_expiry_timestamp_seconds - time())
+        instant: true
+        intervalMs: 20000
+        maxDataPoints: 43200
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: math
+        expression: $A > 0
+  - uid: vpn-revision
+    title: VPN nodes have different configuration revisions
+    condition: B
+    for: 5m
+    noDataState: Alerting
+    execErrState: Alerting
+    isPaused: false
+    labels:
+      service: private-vpn
+    annotations:
+      summary: VPN nodes have different configuration revisions
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
+    data:
+    - refId: A
+      relativeTimeRange:
+        from: 300
+        to: 0
+      datasourceUid: prometheus
+      model:
+        refId: A
+        expr: max(vpn_fleet_revision) - min(vpn_fleet_revision)
+        instant: true
+        intervalMs: 20000
+        maxDataPoints: 43200
+    - refId: B
+      relativeTimeRange:
+        from: 0
+        to: 0
+      datasourceUid: __expr__
+      model:
+        refId: B
+        type: math
+        expression: $A > 0
   - uid: vpn-auth
     title: Repeated administrative authentication failures
     condition: B
@@ -338,7 +323,8 @@ groups:
       service: private-vpn
     annotations:
       summary: Repeated administrative authentication failures
-      runbook_url: docs/runbooks.md
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
     data:
     - refId: A
       relativeTimeRange:
@@ -358,21 +344,8 @@ groups:
       datasourceUid: __expr__
       model:
         refId: B
-        type: classic_conditions
-        conditions:
-        - type: query
-          query:
-            params:
-            - A
-          reducer:
-            type: last
-            params: []
-          evaluator:
-            type: gt
-            params:
-            - 10
-          operator:
-            type: and
+        type: math
+        expression: $A > 10
   - uid: vpn-ddos
     title: 'Possible flood: high packet rate and firewall drops'
     condition: B
@@ -384,7 +357,8 @@ groups:
       service: private-vpn
     annotations:
       summary: 'Possible flood: high packet rate and firewall drops'
-      runbook_url: docs/runbooks.md
+      description: 'Node: {{ $labels.node }}; see dashboard for fleet-wide alerts.'
+      runbook_url: https://github.com/IR-Full/internal-vpn-service/blob/main/docs/runbooks.md
     data:
     - refId: A
       relativeTimeRange:
@@ -406,18 +380,5 @@ groups:
       datasourceUid: __expr__
       model:
         refId: B
-        type: classic_conditions
-        conditions:
-        - type: query
-          query:
-            params:
-            - A
-          reducer:
-            type: last
-            params: []
-          evaluator:
-            type: gt
-            params:
-            - 0
-          operator:
-            type: and
+        type: math
+        expression: $A > 0

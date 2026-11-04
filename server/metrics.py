@@ -10,8 +10,21 @@ import time
 import urllib.request
 
 
+def certificate_expiry(path):
+    try:
+        result = subprocess.run(["openssl", "x509", "-in", str(path), "-noout", "-enddate"],
+                                check=True, capture_output=True, text=True, timeout=5)
+        return ssl.cert_time_to_seconds(result.stdout.strip().removeprefix("notAfter="))
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 0
+
+
 def collect(config):
     metrics = {"vpn_probe_timestamp_seconds": time.time()}
+    # An unreadable/malformed certificate produces zero, which must alert immediately.
+    metrics["vpn_telemetry_certificate_expiry_timestamp_seconds"] = min(
+        certificate_expiry(Path("/etc/vpn-service") / name)
+        for name in ("telemetry-ca.pem", "telemetry-cert.pem"))
     tool = "wg" if config["backend"] == "wireguard" else "awg"
     try:
         result = subprocess.run([tool, "show", "vpn0", "latest-handshakes"], capture_output=True, text=True, check=True, timeout=5)

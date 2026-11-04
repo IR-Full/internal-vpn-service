@@ -21,10 +21,18 @@
           - ansible_facts.default_ipv4.interface is match('^[a-zA-Z0-9_.:-]+$')
         fail_msg: Use Ubuntu 24.04 x86_64 and a generated inventory with encrypted group variables.
     - name: Check image scan freshness and exact lock
+      ansible.builtin.command:
+        argv:
+          - "{{ ansible_playbook_python }}"
+          - "{{ playbook_dir }}/../tools/check_image_lock.py"
+          - --prepare-plugins
+        stdin: "{{ images | to_json }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+    - name: Check server clock against scan timestamp
       ansible.builtin.assert:
         that:
-          - images.scan_status == 'passed'
-          - images.scanned_images_sha256 == images.images_sha256
           - ansible_facts.date_time.epoch | int >= images.scanned_epoch | default(0) | int
           - ansible_facts.date_time.epoch | int - images.scanned_epoch | default(0) | int < 604800
         fail_msg: Run tools/scan_images.py with the current image lock before deployment.

@@ -6,9 +6,14 @@ from pathlib import Path
 import re
 import urllib.parse
 import urllib.request
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from vpn_fleet.image_policy import image_hash
+from vpn_fleet.plugins import plugin_hash
 
 RELEASES = {
-    "grafana": ("grafana/grafana", "grafana/grafana", "13.3.0"),
+    "grafana": ("grafana/grafana", "grafana/grafana", "13.3.0-slim"),
     "loki": ("grafana/loki", "grafana/loki", "3.7.9"),
     "alloy": ("grafana/alloy", "grafana/alloy", "v1.21.3"),
     "prometheus": ("prometheus/prometheus", "prom/prometheus", "v3.15.1"),
@@ -33,15 +38,21 @@ def digest(repository, tag):
         return result
 
 
-def image_hash(data):
-    return hashlib.sha256(json.dumps({k: data[k] for k in sorted(RELEASES)}, sort_keys=True).encode()).hexdigest()
-
-
 if __name__ == "__main__":
     result = {}
     for key, (upstream, repository, tag) in RELEASES.items():
         result[key] = f"{repository}@{digest(repository, tag)}"
         print(key + ": digest verified")
+    result["grafana_plugins"] = {}
+    for plugin_id in ("loki", "prometheus"):
+        version = "13.2.5"
+        metadata = json.load(request(f"https://grafana.com/api/plugins/{plugin_id}/versions/{version}"))
+        if metadata["version"] != version or metadata["signatureType"] != "grafana":
+            raise ValueError("Unexpected plugin release identity/signature publisher")
+        package = metadata["packages"]["linux-amd64"]
+        result["grafana_plugins"][plugin_id] = {"version": version, "sha256": package["sha256"],
+            "url": f"https://grafana.com/api/plugins/{plugin_id}/versions/{version}/download?os=linux&arch=amd64"}
+    result["grafana_plugins_sha256"] = plugin_hash(result["grafana_plugins"])
     result["images_sha256"] = image_hash(result)
     result["scan_status"] = "not_scanned"
     Path("infra/images.lock.json").write_text(json.dumps(result, indent=2) + "\n")

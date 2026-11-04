@@ -5,8 +5,14 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, immutable
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Scan tracked history for secrets
+        run: docker run --rm --network none -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/workspace -v "$PWD:/workspace:ro" zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git --log-opts="--all" --redact --no-banner /workspace
       - name: Build isolated tooling
         run: docker build -f tools/Dockerfile -t vpn-service-tools:local .
       - name: Registry and access-control tests
@@ -19,3 +25,7 @@ jobs:
         run: docker run --rm vpn-service-tools:local pip-audit --skip-editable --progress-spinner off
       - name: Scan exact runtime images
         run: python3 tools/scan_images.py
+      - name: Check actual monitoring queries and alert evaluation, isolated network
+        run: python3 tools/smoke_stack.py
+      - name: Verify log sanitisation through real Alloy and Loki
+        run: python3 tools/check_log_privacy.py

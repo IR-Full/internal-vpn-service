@@ -1,11 +1,65 @@
 {
-  "grafana": "grafana/grafana@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205",
+  "grafana": "grafana/grafana@sha256:a66f098dd9b2e1b5a19287ff176db02d895122488c6e39b3dfcd3fb897039225",
   "loki": "grafana/loki@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28",
   "alloy": "grafana/alloy@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4",
   "prometheus": "prom/prometheus@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2",
-  "images_sha256": "d3c5b0b999dc23ecb1f4f55c65146b6e26ee174edec0ed8baa5c99c7a2941250",
-  "scan_status": "failed",
+  "grafana_plugins": {
+    "loki": {
+      "version": "13.2.5",
+      "sha256": "982cfb81977352db65404cec671952453454643bd9a6c883041c38be519a74ea",
+      "url": "https://grafana.com/api/plugins/loki/versions/13.2.5/download?os=linux&arch=amd64"
+    },
+    "prometheus": {
+      "version": "13.2.5",
+      "sha256": "d24df3eaff9ae61f00d7e857f508fc306912dcf50d657150d1e472e851799fc4",
+      "url": "https://grafana.com/api/plugins/prometheus/versions/13.2.5/download?os=linux&arch=amd64"
+    }
+  },
+  "grafana_plugins_sha256": "fc37cbc90091896372c40d256906385fa45701255ff0956420f3bd12c61b04ba",
+  "images_sha256": "99dbf544ace9f4c80e4dc3718e70460efd484d27d5a4d1638a42ddc87282a2b9",
+  "scan_status": "passed",
   "scanner": "aquasec/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c",
-  "scanned_images_sha256": "d3c5b0b999dc23ecb1f4f55c65146b6e26ee174edec0ed8baa5c99c7a2941250",
-  "scanned_at": "2026-11-04T17:02:57.816894+00:00"
+  "scan_platform": "linux/amd64",
+  "scan_policy": "all-high-critical-v1",
+  "scanned_images_sha256": "99dbf544ace9f4c80e4dc3718e70460efd484d27d5a4d1638a42ddc87282a2b9",
+  "scanned_at": "2026-11-04T18:27:55.982303+00:00",
+  "scanned_epoch": 1793816875,
+  "scan_reports": {
+    "grafana": {
+      "artifact": "grafana/grafana@sha256:a66f098dd9b2e1b5a19287ff176db02d895122488c6e39b3dfcd3fb897039225",
+      "sha256": "8551ce32ef83339dc2812fa9ebf9456ea86c5995395232831cb91412f96b813c",
+      "status": "passed",
+      "findings": 0
+    },
+    "loki": {
+      "artifact": "grafana/loki@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28",
+      "sha256": "fe21b9aa1b61d1ff9617c9a553c33dc0d7c75e0e49ac6bbd0c025808d6ef726a",
+      "status": "passed",
+      "findings": 0
+    },
+    "alloy": {
+      "artifact": "grafana/alloy@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4",
+      "sha256": "c97e0ab1faee1141d45c30c04b59c699800e99b00e95518cc2011dfc480fdde0",
+      "status": "passed",
+      "findings": 0
+    },
+    "prometheus": {
+      "artifact": "prom/prometheus@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2",
+      "sha256": "3ad85f275f1752b58e59d61e16e6dd986f88693889e340a615033f30729be0cd",
+      "status": "passed",
+      "findings": 0
+    },
+    "plugin_loki": {
+      "artifact": "grafana-plugin:loki@sha256:982cfb81977352db65404cec671952453454643bd9a6c883041c38be519a74ea",
+      "sha256": "78cbe519568e5da61908609c15e36d4a774f9a6337e4e65b7efcaf67dd3c8930",
+      "status": "passed",
+      "findings": 0
+    },
+    "plugin_prometheus": {
+      "artifact": "grafana-plugin:prometheus@sha256:d24df3eaff9ae61f00d7e857f508fc306912dcf50d657150d1e472e851799fc4",
+      "sha256": "8470395c3dc94ddb718df4395e7b5563922880dc6504e9c540c7986849a44245",
+      "status": "passed",
+      "findings": 0
+    }
+  }
 }
