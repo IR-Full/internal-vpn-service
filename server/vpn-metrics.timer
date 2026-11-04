@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect aggregate VPN health every 20 seconds
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=20s
+AccuracySec=2s
+
+[Install]
+WantedBy=timers.target

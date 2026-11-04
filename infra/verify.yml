@@ -1,0 +1,54 @@
+---
+- name: Enforce readiness gates on both nodes
+  hosts: vpn
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Require current revision and expected fleet
+      ansible.builtin.slurp:
+        src: /var/lib/vpn-service/ack.json
+      register: verify_ack
+    - name: Verify node is not serving stale access
+      ansible.builtin.assert:
+        that:
+          - (verify_ack.content | b64decode | from_json).revision | int == fleet_revision | int
+          - (verify_ack.content | b64decode | from_json).fleet_id == fleet_id
+    - name: Inspect effective SSH authentication
+      ansible.builtin.command: /usr/sbin/sshd -T
+      changed_when: false
+      register: effective_ssh
+    - name: Require mandatory MFA, no root and no password login
+      ansible.builtin.assert:
+        that:
+          - "'authenticationmethods publickey,keyboard-interactive:pam' in effective_ssh.stdout"
+          - "'permitrootlogin no' in effective_ssh.stdout"
+          - "'passwordauthentication no' in effective_ssh.stdout"
+    - name: Require confirmed firewall
+      ansible.builtin.command: /usr/local/sbin/vpn-firewall status
+      changed_when: false
+      register: verify_firewall
+    - name: Reject rollback or pending firewall state
+      ansible.builtin.assert:
+        that: (verify_firewall.stdout | from_json).status == 'confirmed'
+    - name: Require last successful backup newer than 26 hours
+      ansible.builtin.command:
+        argv: [python3, -c, "import time,pathlib; assert time.time()-int(pathlib.Path('/var/lib/vpn-service/backup-success').read_text()) < 93600"]
+      changed_when: false
+    - name: Require active VPN and DNS
+      ansible.builtin.command:
+        argv: [systemctl, is-active, vpn-tunnel.service, unbound.service, vpn-metrics.timer]
+      changed_when: false
+    - name: Require Grafana healthy
+      ansible.builtin.uri:
+        url: http://127.0.0.1:3000/api/health
+      when: monitoring_node | bool
+    - name: Require explicit recorded operational acceptance
+      ansible.builtin.assert:
+        that:
+          - notifications_tested | default(false) | bool
+          - restoration_tested | default(false) | bool
+          - client_leak_tests_passed | default(false) | bool
+          - provider_contract_verified | default(false) | bool
+          - monthly_total_eur | default(999) | float <= 50
+          - russia_legal_review_completed | default(false) | bool
+        fail_msg: Record actual notification delivery, restore/leak tests, contract/budget and legal review. Do not assert these flags without evidence.

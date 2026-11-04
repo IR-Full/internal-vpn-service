@@ -1,0 +1,31 @@
+---
+- name: Reconcile device access on both reachable nodes, even if the other is offline
+  hosts: vpn
+  become: true
+  gather_facts: false
+  vars:
+    secrets_for_node: "{{ node_secrets[inventory_hostname] }}"
+  tasks:
+    - name: Write encrypted-in-transit desired credentials to root-only runtime configuration
+      ansible.builtin.template:
+        src: roles/node/templates/tunnel.json.j2
+        dest: /etc/vpn-service/tunnel.json
+        mode: '0600'
+      no_log: true
+    - name: Apply full peer set and reject stale revisions
+      ansible.builtin.command: /usr/local/sbin/vpn-node-apply /etc/vpn-service/tunnel.json
+      register: peer_apply
+      no_log: true
+      changed_when: (peer_apply.stdout | from_json).changed
+    - name: Read nonsecret acknowledgement
+      ansible.builtin.slurp:
+        src: /var/lib/vpn-service/ack.json
+      register: peer_ack
+    - name: Require expected fleet and revision
+      ansible.builtin.assert:
+        that:
+          - (peer_ack.content | b64decode | from_json).revision | int == fleet_revision | int
+          - (peer_ack.content | b64decode | from_json).fleet_id == fleet_id
+    - name: Report acknowledgement
+      ansible.builtin.debug:
+        msg: "{{ peer_ack.content | b64decode | from_json }}"

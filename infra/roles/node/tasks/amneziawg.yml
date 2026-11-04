@@ -1,0 +1,61 @@
+---
+- name: Require explicitly locked official Amnezia package source
+  ansible.builtin.assert:
+    that:
+      - amnezia_ppa_key_sha256 is defined
+      - amnezia_ppa_key_url is defined
+      - amnezia_package_version is defined
+      - amnezia_tools_version is defined
+      - amnezia_dkms_version is defined
+      - amneziawg_options | length > 0
+    fail_msg: Review the official PPA key checksum, package version and compatible client options first. No curl-pipe-shell or unpinned kernel module is installed.
+
+- name: Install build headers for the currently running kernel
+  ansible.builtin.apt:
+    name: "{{ ['linux-headers-' + ansible_facts.kernel, 'dkms', 'gnupg'] }}"
+    state: present
+
+- name: Create scoped APT keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download verified PPA signing key into a dedicated keyring
+  ansible.builtin.get_url:
+    url: "{{ amnezia_ppa_key_url }}"
+    dest: /etc/apt/keyrings/amnezia.asc
+    checksum: "sha256:{{ amnezia_ppa_key_sha256 }}"
+    mode: '0644'
+
+- name: Add explicitly scoped official package source
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/amnezia-vpn.list
+    mode: '0644'
+    content: "deb [signed-by=/etc/apt/keyrings/amnezia.asc] https://ppa.launchpadcontent.net/amnezia/ppa/ubuntu noble main\n"
+
+- name: Restrict PPA to VPN packages
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/amnezia-vpn
+    mode: '0644'
+    content: |
+      Package: *
+      Pin: release o=LP-PPA-amnezia
+      Pin-Priority: -1
+
+      Package: amneziawg amneziawg-tools amneziawg-dkms
+      Pin: release o=LP-PPA-amnezia
+      Pin-Priority: 500
+
+- name: Install reviewed AmneziaWG version
+  ansible.builtin.apt:
+    name:
+      - "amneziawg={{ amnezia_package_version }}"
+      - "amneziawg-tools={{ amnezia_tools_version }}"
+      - "amneziawg-dkms={{ amnezia_dkms_version }}"
+    state: present
+    update_cache: true
+
+- name: Require working module on current kernel
+  ansible.builtin.command: modprobe amneziawg
+  changed_when: false

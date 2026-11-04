@@ -1,0 +1,16 @@
+.venv/
+.state/
+private/
+exports/
+graphify-out/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+*.retry
+*.key
+*.pem
+*.conf
+build/
+dist/

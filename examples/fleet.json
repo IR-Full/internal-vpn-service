@@ -1,0 +1,8 @@
+{
+  "admin_cidrs": ["203.0.113.10/32"],
+  "admin_public_key": "REPLACE_WITH_YOUR_ED25519_PUBLIC_KEY",
+  "nodes": [
+    {"id": "vpn_a", "endpoint": "192.0.2.10", "port": 51820, "network": "10.77.0.0/23", "backend": "wireguard"},
+    {"id": "vpn_b", "endpoint": "192.0.2.20", "port": 51820, "network": "10.77.2.0/23", "backend": "wireguard"}
+  ]
+}

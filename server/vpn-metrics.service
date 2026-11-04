@@ -1,0 +1,12 @@
+[Unit]
+Description=Private VPN aggregate metrics collector
+After=vpn-tunnel.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vpn-metrics
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/vpn-service/metrics

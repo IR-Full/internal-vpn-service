@@ -1,0 +1,93 @@
+x-common: &common
+  restart: unless-stopped
+  network_mode: host
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  logging:
+    driver: journald
+    options: {tag: vpn-service}
+  tmpfs: [/tmp:size=32m,mode=1777]
+services:
+  alloy:
+    <<: *common
+    image: {{ images.alloy }}
+    user: "0:0"
+    mem_limit: 256m
+    cpus: 0.5
+    command: [run, --server.http.listen-addr=127.0.0.1:12345, --storage.path=/var/lib/alloy, /etc/alloy/config.alloy]
+    volumes:
+      - ./config/alloy.alloy:/etc/alloy/config.alloy:ro
+      - /etc/vpn-service/telemetry-ca.pem:/etc/alloy/ca.pem:ro
+      - /etc/vpn-service/telemetry-cert.pem:/etc/alloy/cert.pem:ro
+      - /etc/vpn-service/telemetry-key.pem:/etc/alloy/key.pem:ro
+      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /var/log/vpn-service:/var/log/vpn-service:ro
+      - /var/lib/vpn-service/metrics:/var/lib/vpn-metrics:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - alloy-data:/var/lib/alloy
+{% if monitoring_node %}
+  prometheus:
+    <<: *common
+    image: {{ images.prometheus }}
+    mem_limit: 512m
+    cpus: 1.0
+    command: [--config.file=/etc/prometheus/prometheus.yml, --web.listen-address=127.0.0.1:9090, --web.enable-remote-write-receiver, --storage.tsdb.path=/prometheus, --storage.tsdb.retention.time=30d, --storage.tsdb.retention.size=2GB]
+    volumes: [./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro, prometheus-data:/prometheus]
+  loki:
+    <<: *common
+    image: {{ images.loki }}
+    mem_limit: 768m
+    cpus: 1.0
+    command: [-config.file=/etc/loki/loki.yml]
+    volumes: [./config/loki.yml:/etc/loki/loki.yml:ro, loki-data:/loki]
+  grafana:
+    <<: *common
+    image: {{ images.grafana }}
+    user: "472:472"
+    mem_limit: 384m
+    cpus: 0.5
+    environment:
+      GF_SERVER_HTTP_ADDR: 127.0.0.1
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_ADMIN_USER: fleetadmin
+      GF_SECURITY_ADMIN_PASSWORD__FILE: /run/secrets/grafana-password
+      GF_SECURITY_SECRET_KEY__FILE: /run/secrets/grafana-secret-key
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_LOG_LEVEL: warn
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+{% if alerting_settings.get('enabled', false) %}
+      GF_SMTP_ENABLED: "true"
+      GF_SMTP_HOST__FILE: /run/secrets/smtp-host
+      GF_SMTP_USER__FILE: /run/secrets/smtp-user
+      GF_SMTP_PASSWORD__FILE: /run/secrets/smtp-password
+      GF_SMTP_FROM_ADDRESS__FILE: /run/secrets/smtp-from
+      GF_SMTP_STARTTLS_POLICY: MandatoryStartTLS
+      GF_SMTP_SKIP_VERIFY: "false"
+{% endif %}
+    volumes:
+      - ./config/provisioning:/etc/grafana/provisioning:ro
+      - ./config/dashboards:/var/lib/grafana/dashboards:ro
+      - /etc/vpn-service/grafana-password:/run/secrets/grafana-password:ro
+      - /etc/vpn-service/grafana-secret-key:/run/secrets/grafana-secret-key:ro
+      - grafana-data:/var/lib/grafana
+{% if alerting_settings.get('enabled', false) %}
+      - /etc/vpn-service/smtp-host:/run/secrets/smtp-host:ro
+      - /etc/vpn-service/smtp-user:/run/secrets/smtp-user:ro
+      - /etc/vpn-service/smtp-password:/run/secrets/smtp-password:ro
+      - /etc/vpn-service/smtp-from:/run/secrets/smtp-from:ro
+{% endif %}
+{% endif %}
+volumes:
+  alloy-data: {}
+{% if monitoring_node %}
+  prometheus-data: {}
+  loki-data: {}
+  grafana-data: {}
+{% endif %}

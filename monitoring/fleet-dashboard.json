@@ -1,0 +1,13 @@
+{
+  "uid": "private-vpn-fleet", "title": "Private VPN — traffic and security", "schemaVersion": 39,
+  "editable": false, "refresh": "20s", "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {"id": 1, "type": "timeseries", "title": "VPN traffic, Mbit/s", "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum by (node) (rate(node_network_transmit_bytes_total{device=\"vpn0\"}[2m])) * 8 / 1000000", "legendFormat": "{{node}} download"}, {"refId": "B", "expr": "sum by (node) (rate(node_network_receive_bytes_total{device=\"vpn0\"}[2m])) * 8 / 1000000", "legendFormat": "{{node}} upload"}]},
+    {"id": 2, "type": "timeseries", "title": "CPU utilisation, %", "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "100 * (1 - avg by (node) (rate(node_cpu_seconds_total{mode=\"idle\"}[2m])))", "legendFormat": "{{node}}"}]},
+    {"id": 3, "type": "stat", "title": "Desired revision applied", "gridPos": {"x": 0, "y": 8, "w": 6, "h": 5}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "vpn_fleet_revision", "legendFormat": "{{node}}"}]},
+    {"id": 4, "type": "timeseries", "title": "RAM utilisation, %", "gridPos": {"x": 6, "y": 8, "w": 9, "h": 5}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)", "legendFormat": "{{node}}"}]},
+    {"id": 5, "type": "stat", "title": "WAN transmitted in selected interval — bytes, not invoice", "gridPos": {"x": 15, "y": 8, "w": 9, "h": 5}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "sum by(node) (increase(node_network_transmit_bytes_total{device!~\"lo|vpn0|wg-mgmt|docker.*|veth.*|br-.*\"}[$__range]))", "legendFormat": "{{node}}"}], "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []}},
+    {"id": 6, "type": "timeseries", "title": "Telemetry management-path health", "gridPos": {"x": 0, "y": 13, "w": 12, "h": 6}, "datasource": {"type": "prometheus", "uid": "prometheus"}, "targets": [{"refId": "A", "expr": "vpn_telemetry_reachable", "legendFormat": "{{node}}"}]},
+    {"id": 7, "type": "logs", "title": "Sanitised administrative and configuration events", "gridPos": {"x": 12, "y": 13, "w": 12, "h": 8}, "datasource": {"type": "loki", "uid": "loki"}, "targets": [{"refId": "A", "expr": "{job=~\"admin_auth|management\"}", "queryType": "range"}]}
+  ]
+}

@@ -1,0 +1,13 @@
+[Unit]
+Description=Private VPN last-known-good firewall
+Before=vpn-tunnel.service
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/vpn-firewall boot
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

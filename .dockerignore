@@ -1,0 +1,9 @@
+.git
+.state
+private
+exports
+graphify-out
+.venv
+__pycache__
+*.key
+*.pem

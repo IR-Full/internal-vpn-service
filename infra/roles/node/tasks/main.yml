@@ -1,0 +1,259 @@
+---
+- name: Install maintained distribution packages
+  ansible.builtin.apt:
+    name: [wireguard-tools, nftables, unbound, openssl, openssh-server, libpam-google-authenticator, unattended-upgrades, auditd, python3, nginx, logrotate, curl, ca-certificates, docker.io, docker-compose-v2, restic]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create private configuration and state paths
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+  loop: [/etc/vpn-service, /var/lib/vpn-service, /etc/wireguard, /run/vpn-service]
+
+- name: Create bounded event and metric directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0750'
+    owner: root
+    group: root
+  loop: [/var/log/vpn-service, /var/lib/vpn-service/metrics]
+
+- name: Create administrator
+  ansible.builtin.user:
+    name: vpnadmin
+    groups: sudo
+    append: true
+    shell: /bin/bash
+    create_home: true
+
+- name: Permit key-based bootstrap for administrator
+  ansible.builtin.file:
+    path: /home/vpnadmin/.ssh
+    state: directory
+    owner: vpnadmin
+    group: vpnadmin
+    mode: '0700'
+
+- name: Install explicit administrator public key
+  ansible.builtin.copy:
+    content: "{{ admin_public_key }}\n"
+    dest: /home/vpnadmin/.ssh/authorized_keys
+    owner: vpnadmin
+    group: vpnadmin
+    mode: '0600'
+
+- name: Administrative elevation relies on protected SSH and MFA, not a shared sudo password
+  ansible.builtin.copy:
+    content: "vpnadmin ALL=(ALL:ALL) NOPASSWD: ALL\n"
+    dest: /etc/sudoers.d/vpnadmin
+    mode: '0440'
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Provision optional AmneziaWG backend
+  ansible.builtin.include_tasks: amneziawg.yml
+  when: vpn_backend == 'amneziawg'
+
+- name: Configure forwarding, source routing protections and memory-safe defaults
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/80-vpn-service.conf
+    mode: '0644'
+    content: |
+      net.ipv4.ip_forward=1
+      net.ipv6.conf.all.forwarding=0
+      net.ipv4.conf.all.accept_redirects=0
+      net.ipv4.conf.default.accept_redirects=0
+      net.ipv4.conf.all.send_redirects=0
+      net.ipv4.conf.default.send_redirects=0
+      net.ipv4.conf.all.accept_source_route=0
+      net.ipv4.conf.default.accept_source_route=0
+      net.ipv4.conf.all.rp_filter=2
+      net.ipv4.tcp_syncookies=1
+  register: vpn_sysctl
+
+- name: Apply changed kernel settings
+  ansible.builtin.command: sysctl --system
+  when: vpn_sysctl.changed
+  changed_when: true
+
+- name: Install VPN and firewall applicators
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../server/{{ item.src }}"
+    dest: "/usr/local/sbin/{{ item.dest }}"
+    mode: '0700'
+  loop:
+    - {src: node_apply.py, dest: vpn-node-apply}
+    - {src: firewall.py, dest: vpn-firewall}
+
+- name: Render secret desired tunnel configuration
+  ansible.builtin.template:
+    src: tunnel.json.j2
+    dest: /etc/vpn-service/tunnel.json
+    mode: '0600'
+  no_log: true
+
+- name: Configure management tunnel
+  ansible.builtin.template:
+    src: management.conf.j2
+    dest: /etc/wireguard/wg-mgmt.conf
+    mode: '0600'
+  no_log: true
+  register: mgmt_config
+
+- name: Enable management tunnel
+  ansible.builtin.systemd_service:
+    name: wg-quick@wg-mgmt
+    enabled: true
+    state: "{{ 'restarted' if mgmt_config.changed else 'started' }}"
+
+- name: Install owned firewall configurations
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "/etc/vpn-service/{{ item.dest }}"
+    mode: '0600'
+  loop:
+    - {src: firewall.nft.j2, dest: firewall.nft}
+    - {src: rescue.nft.j2, dest: firewall-rescue.nft}
+  register: firewall_config
+  tags: [firewall]
+
+- name: Install systemd services
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: '0644'
+  loop: [vpn-firewall.service, vpn-tunnel.service]
+
+- name: Enable firewall boot service without confirming staged policy
+  ansible.builtin.systemd_service:
+    name: vpn-firewall.service
+    enabled: true
+    daemon_reload: true
+    state: started
+
+- name: Start user tunnel
+  ansible.builtin.systemd_service:
+    name: vpn-tunnel.service
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Reconcile all peers without disconnecting unrelated devices
+  ansible.builtin.command: /usr/local/sbin/vpn-node-apply /etc/vpn-service/tunnel.json
+  register: vpn_apply
+  changed_when: (vpn_apply.stdout | from_json).changed
+  no_log: true
+
+- name: Configure private DNS resolver
+  ansible.builtin.template:
+    src: unbound.conf.j2
+    dest: /etc/unbound/unbound.conf.d/vpn-service.conf
+    mode: '0644'
+  register: dns_config
+
+- name: Validate complete resolver configuration
+  ansible.builtin.command: unbound-checkconf
+  changed_when: false
+
+- name: Start DNS after tunnel addresses exist
+  ansible.builtin.systemd_service:
+    name: unbound
+    enabled: true
+    state: "{{ 'restarted' if dns_config.changed else 'started' }}"
+
+- name: Bind resolver startup to the tunnel
+  ansible.builtin.file:
+    path: /etc/systemd/system/unbound.service.d
+    state: directory
+    mode: '0755'
+
+- name: Order resolver at boot
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/unbound.service.d/vpn.conf
+    mode: '0644'
+    content: |
+      [Unit]
+      After=vpn-tunnel.service
+      Requires=vpn-tunnel.service
+
+- name: Set bounded journal retention
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: '0755'
+
+- name: Configure system journal limits
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/vpn-service.conf
+    mode: '0644'
+    content: |
+      [Journal]
+      Storage=persistent
+      SystemMaxUse=200M
+      RuntimeMaxUse=50M
+      MaxRetentionSec=7day
+      RateLimitIntervalSec=30s
+      RateLimitBurst=500
+  register: journal_config
+
+- name: Apply journal limits
+  ansible.builtin.systemd_service:
+    name: systemd-journald
+    state: restarted
+  when: journal_config.changed
+
+- name: Rotate credential-free management events
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/vpn-service
+    mode: '0644'
+    content: |
+      /var/log/vpn-service/*.jsonl {
+        daily
+        rotate 30
+        maxsize 5M
+        missingok
+        notifempty
+        compress
+        create 0600 root root
+      }
+
+- name: Enable distribution security updates without unattended reboot
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52vpn-security
+    mode: '0644'
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+      Unattended-Upgrade::Automatic-Reboot "false";
+      Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+- name: Audit configuration writes in the private native audit log
+  ansible.builtin.copy:
+    dest: /etc/audit/rules.d/vpn-service.rules
+    mode: '0600'
+    content: |
+      -w /etc/ssh/sshd_config.d/ -p wa -k vpn_admin_config
+      -w /etc/sudoers.d/ -p wa -k vpn_admin_config
+      -w /etc/vpn-service/ -p wa -k vpn_configuration
+  register: audit_config
+
+- name: Load audit rules
+  ansible.builtin.command: augenrules --load
+  when: audit_config.changed
+  changed_when: true
+
+- name: Read acknowledgement only
+  ansible.builtin.slurp:
+    src: /var/lib/vpn-service/ack.json
+  register: vpn_ack
+
+- name: Report revision and firewall confirmation requirement
+  ansible.builtin.debug:
+    msg:
+      - "{{ vpn_ack.content | b64decode | from_json }}"
+      - "If firewall changed: open a FRESH SSH session, verify access, then sudo vpn-firewall confirm within 120 seconds. Otherwise it rolls back to last-good/rescue policy."

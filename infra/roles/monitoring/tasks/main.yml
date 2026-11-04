@@ -1,0 +1,195 @@
+---
+- name: Prepare telemetry credentials
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "/etc/vpn-service/{{ item.name }}"
+    mode: '0600'
+  loop:
+    - {name: telemetry-ca.pem, content: "{{ telemetry_ca }}"}
+    - {name: telemetry-cert.pem, content: "{{ secrets_for_node.tls.cert }}"}
+    - {name: telemetry-key.pem, content: "{{ secrets_for_node.tls.key }}"}
+  no_log: true
+  register: telemetry_credentials
+
+- name: Install native aggregate metrics collector
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../server/metrics.py"
+    dest: /usr/local/sbin/vpn-metrics
+    mode: '0700'
+
+- name: Configure collector identity
+  ansible.builtin.copy:
+    content: "{{ {'node': inventory_hostname, 'backend': vpn_backend} | to_nice_json }}"
+    dest: /etc/vpn-service/metrics.json
+    mode: '0600'
+
+- name: Install collector units
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../server/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: '0644'
+  loop: [vpn-metrics.service, vpn-metrics.timer]
+
+- name: Enable collector timer
+  ansible.builtin.systemd_service:
+    name: vpn-metrics.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Create monitoring paths
+  ansible.builtin.file:
+    path: "/opt/vpn-monitoring/{{ item }}"
+    state: directory
+    mode: '0755'
+  loop: [config, config/provisioning, config/provisioning/datasources, config/provisioning/dashboards, config/provisioning/alerting, config/dashboards, data]
+
+- name: Install Alloy configuration on both nodes
+  ansible.builtin.template:
+    src: alloy.alloy.j2
+    dest: /opt/vpn-monitoring/config/alloy.alloy
+    mode: '0600'
+  register: alloy_config
+
+- name: Place Grafana bootstrap secrets in root-controlled files readable by its service UID
+  ansible.builtin.copy:
+    content: "{{ item.value }}"
+    dest: "/etc/vpn-service/{{ item.name }}"
+    owner: '472'
+    group: '472'
+    mode: '0400'
+  loop:
+    - {name: grafana-password, value: "{{ grafana_secrets.password }}"}
+    - {name: grafana-secret-key, value: "{{ grafana_secrets.secret_key }}"}
+  no_log: true
+  when: monitoring_node | bool
+  register: grafana_credentials
+
+- name: Copy monitoring configurations on B
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../monitoring/{{ item.src }}"
+    dest: "/opt/vpn-monitoring/config/{{ item.dest }}"
+    mode: '0644'
+  loop:
+    - {src: prometheus.yml, dest: prometheus.yml}
+    - {src: loki.yml, dest: loki.yml}
+    - {src: datasources.yml, dest: provisioning/datasources/main.yml}
+    - {src: dashboards.yml, dest: provisioning/dashboards/main.yml}
+    - {src: alerts.yml, dest: provisioning/alerting/main.yml}
+    - {src: fleet-dashboard.json, dest: dashboards/fleet.json}
+  when: monitoring_node | bool
+  register: monitoring_files
+
+- name: Install both Telegram and email contacts as service-readable secret provisioning
+  ansible.builtin.copy:
+    content: "{{ alerting_provisioning | to_nice_json }}"
+    dest: /opt/vpn-monitoring/config/provisioning/alerting/contacts.yml
+    owner: '472'
+    group: '472'
+    mode: '0400'
+  no_log: true
+  when: monitoring_node | bool and (alerting_settings.enabled | default(false) | bool)
+  register: contacts_config
+
+- name: Install SMTP settings as private files, not inspectable container environment values
+  ansible.builtin.copy:
+    content: "{{ item.value }}"
+    dest: "/etc/vpn-service/smtp-{{ item.name }}"
+    owner: '472'
+    group: '472'
+    mode: '0400'
+  loop:
+    - {name: host, value: "{{ alerting_settings.smtp.host | default('') }}"}
+    - {name: user, value: "{{ alerting_settings.smtp.user | default('') }}"}
+    - {name: password, value: "{{ alerting_settings.smtp.password | default('') }}"}
+    - {name: from, value: "{{ alerting_settings.smtp.from_address | default('') }}"}
+  no_log: true
+  when: monitoring_node | bool and (alerting_settings.enabled | default(false) | bool)
+  register: smtp_config
+
+- name: Disable distribution default web listener
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+
+- name: Render mTLS ingestion gateway on B
+  ansible.builtin.template:
+    src: telemetry-nginx.conf.j2
+    dest: /etc/nginx/conf.d/vpn-telemetry.conf
+    mode: '0600'
+  when: monitoring_node | bool
+  register: telemetry_gateway
+
+- name: Validate gateway
+  ansible.builtin.command: nginx -t
+  changed_when: false
+  when: monitoring_node | bool
+
+- name: Create gateway startup override path
+  ansible.builtin.file:
+    path: /etc/systemd/system/nginx.service.d
+    state: directory
+    mode: '0755'
+  when: monitoring_node | bool
+
+- name: Start gateway only after its private address exists
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/nginx.service.d/vpn.conf
+    mode: '0644'
+    content: |
+      [Unit]
+      After=wg-quick@wg-mgmt.service
+      Requires=wg-quick@wg-mgmt.service
+      [Service]
+      Restart=on-failure
+      RestartSec=5s
+  when: monitoring_node | bool
+
+- name: Activate gateway
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: "{{ 'restarted' if telemetry_gateway.changed else 'started' }}"
+    daemon_reload: true
+  when: monitoring_node | bool
+
+- name: Stop unused web server on A
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: false
+    state: stopped
+  when: not (monitoring_node | bool)
+
+- name: Render digest-pinned containers with host networking and loopback listeners
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: /opt/vpn-monitoring/compose.yml
+    mode: '0600'
+  register: monitoring_compose
+
+- name: Enable Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Validate Compose
+  ansible.builtin.command: docker compose -f /opt/vpn-monitoring/compose.yml config --quiet
+  changed_when: false
+
+- name: Start monitoring containers
+  ansible.builtin.command:
+    argv: "{{ ['docker', 'compose', '-f', '/opt/vpn-monitoring/compose.yml', 'up', '-d', '--remove-orphans'] + (['--force-recreate'] if monitoring_recreate else []) }}"
+  vars:
+    monitoring_recreate: "{{ telemetry_credentials.changed or alloy_config.changed or grafana_credentials.changed or monitoring_files.changed or contacts_config.changed or smtp_config.changed or monitoring_compose.changed }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Created' in compose_up.stderr or 'Recreated' in compose_up.stderr"
+
+- name: Check local Grafana health
+  ansible.builtin.uri:
+    url: http://127.0.0.1:3000/api/health
+  register: grafana_health
+  retries: 20
+  delay: 3
+  until: grafana_health.status == 200
+  when: monitoring_node | bool

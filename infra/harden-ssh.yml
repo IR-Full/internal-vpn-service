@@ -1,0 +1,25 @@
+---
+- name: Stage mandatory administrative MFA, one node at a time
+  hosts: vpn
+  become: true
+  serial: 1
+  gather_facts: false
+  tasks:
+    - name: Install SSH guard
+      ansible.builtin.copy:
+        src: ../server/ssh_guard.py
+        dest: /usr/local/sbin/vpn-ssh-guard
+        mode: '0700'
+    - name: Stage with timed rollback, requires prior local TOTP enrollment
+      ansible.builtin.command: /usr/local/sbin/vpn-ssh-guard stage
+      changed_when: true
+    - name: Require new-session verification
+      ansible.builtin.pause:
+        prompt: "From a NEW terminal authenticate as vpnadmin using key + TOTP, run sudo vpn-ssh-guard confirm, then press Enter. Do NOT confirm from the old connection."
+    - name: Verify explicit confirmation marker
+      ansible.builtin.stat:
+        path: /var/lib/vpn-service/ssh-mfa-confirmed
+      register: confirmed_ssh
+    - name: Require completed verification
+      ansible.builtin.assert:
+        that: confirmed_ssh.stat.exists

@@ -1,0 +1,11 @@
+{
+  "grafana": "grafana/grafana@sha256:488984b716c0862639f91a698adbe2862677a5a07bad42da5f03f3030883b205",
+  "loki": "grafana/loki@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28",
+  "alloy": "grafana/alloy@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4",
+  "prometheus": "prom/prometheus@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2",
+  "images_sha256": "d3c5b0b999dc23ecb1f4f55c65146b6e26ee174edec0ed8baa5c99c7a2941250",
+  "scan_status": "failed",
+  "scanner": "aquasec/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c",
+  "scanned_images_sha256": "d3c5b0b999dc23ecb1f4f55c65146b6e26ee174edec0ed8baa5c99c7a2941250",
+  "scanned_at": "2026-11-04T17:02:57.816894+00:00"
+}

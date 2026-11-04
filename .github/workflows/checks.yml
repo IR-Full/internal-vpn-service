@@ -1,0 +1,21 @@
+name: Validate private VPN infrastructure
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build isolated tooling
+        run: docker build -f tools/Dockerfile -t vpn-service-tools:local .
+      - name: Registry and access-control tests
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace vpn-service-tools:local
+      - name: Template and Ansible validation
+        run: docker run --rm -v "$PWD:/workspace" -w /workspace vpn-service-tools:local python tools/validate_local.py
+      - name: Kernel tunnel and firewall test, no internet in lab
+        run: docker run --rm --network none --cap-add NET_ADMIN --cap-add SYS_ADMIN --security-opt apparmor=unconfined --sysctl net.ipv4.ip_forward=1 --sysctl net.ipv6.conf.all.forwarding=0 -v "$PWD:/workspace" -w /workspace vpn-service-tools:local python tests/network_lab.py
+      - name: Dependency audit
+        run: docker run --rm vpn-service-tools:local pip-audit --skip-editable --progress-spinner off
+      - name: Scan exact runtime images
+        run: python3 tools/scan_images.py

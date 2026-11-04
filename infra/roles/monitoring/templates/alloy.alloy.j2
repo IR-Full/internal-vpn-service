@@ -1,0 +1,83 @@
+logging { level = "warn" }
+
+prometheus.exporter.unix "host" {
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+  set_collectors = ["cpu", "meminfo", "netdev", "netstat", "loadavg", "time", "textfile"]
+  textfile { directory = "/var/lib/vpn-metrics" }
+}
+prometheus.scrape "host" {
+  targets = prometheus.exporter.unix.host.targets
+  scrape_interval = "20s"
+  forward_to = [prometheus.relabel.node.receiver]
+}
+prometheus.relabel "node" {
+  rule {
+    target_label = "node"
+    replacement = "{{ inventory_hostname }}"
+  }
+  forward_to = [prometheus.remote_write.central.receiver]
+}
+prometheus.remote_write "central" {
+  endpoint {
+    url = "https://10.78.0.2:8443/api/v1/write"
+    tls_config {
+      ca_file = "/etc/alloy/ca.pem"
+      cert_file = "/etc/alloy/cert.pem"
+      key_file = "/etc/alloy/key.pem"
+    }
+    queue_config {
+      capacity = 1000
+      max_shards = 2
+    }
+  }
+  wal { max_keepalive_time = "1h" }
+}
+
+// Never forward arbitrary journal messages: retain only recognised event categories.
+loki.source.journal "ssh" {
+  matches = "_SYSTEMD_UNIT=ssh.service"
+  max_age = "1h"
+  labels = {job = "admin_auth", node = "{{ inventory_hostname }}"}
+  forward_to = [loki.process.sanitized.receiver]
+}
+loki.process "sanitized" {
+  stage.regex { expression = "(?P<event>Accepted publickey|Failed publickey|Failed keyboard-interactive|authentication failure|Invalid user)" }
+  stage.labels { values = {event = ""} }
+  stage.match {
+    selector = "{event=\"\"}"
+    action = "drop"
+  }
+  stage.output { source = "event" }
+  forward_to = [loki.write.central.receiver]
+}
+loki.source.journal "services" {
+  matches = "_SYSTEMD_UNIT=vpn-tunnel.service + _SYSTEMD_UNIT=unbound.service + _SYSTEMD_UNIT=docker.service + _SYSTEMD_UNIT=nginx.service"
+  max_age = "1h"
+  labels = {job = "service_health", node = "{{ inventory_hostname }}"}
+  forward_to = [loki.process.service_categories.receiver]
+}
+loki.process "service_categories" {
+  stage.regex { expression = "(?i)(?P<event>error|failed|warning|out of memory|oomkilled|configuration rejected)" }
+  stage.labels { values = {event = ""} }
+  stage.match {
+    selector = "{event=\"\"}"
+    action = "drop"
+  }
+  stage.output { source = "event" }
+  forward_to = [loki.write.central.receiver]
+}
+loki.source.file "management" {
+  targets = [{__path__ = "/var/log/vpn-service/events.jsonl", job = "management", node = "{{ inventory_hostname }}"}]
+  forward_to = [loki.write.central.receiver]
+}
+loki.write "central" {
+  endpoint {
+    url = "https://10.78.0.2:8443/loki/api/v1/push"
+    tls_config {
+      ca_file = "/etc/alloy/ca.pem"
+      cert_file = "/etc/alloy/cert.pem"
+      key_file = "/etc/alloy/key.pem"
+    }
+  }
+}

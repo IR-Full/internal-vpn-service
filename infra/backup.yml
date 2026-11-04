@@ -1,0 +1,77 @@
+---
+- name: Enable independently stored encrypted configuration backups
+  hosts: vpn
+  become: true
+  serial: 1
+  gather_facts: false
+  tasks:
+    - name: Require a real external repository and vaulted password
+      ansible.builtin.assert:
+        that:
+          - restic_repository is defined
+          - restic_repository is match('^(sftp:|s3:https://|rest:https://)')
+          - restic_repository is match('^[^\r\n]+$')
+          - restic_password is defined
+          - restic_password | length >= 24
+        fail_msg: Configure an independent repository and vaulted password. Local disks and another directory on these nodes are not independent backups.
+      no_log: true
+    - name: Validate optional backend credential environment
+      ansible.builtin.assert:
+        that:
+          - item.key in ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'RESTIC_REST_USERNAME', 'RESTIC_REST_PASSWORD']
+          - item.value is match('^[^\r\n]+$')
+      loop: "{{ restic_environment | default({}) | dict2items }}"
+      no_log: true
+    - name: Install backup credentials
+      ansible.builtin.copy:
+        content: "{{ restic_password }}"
+        dest: /etc/vpn-service/restic-password
+        mode: '0600'
+      no_log: true
+    - name: Write backup environment
+      ansible.builtin.copy:
+        content: |
+          RESTIC_REPOSITORY={{ restic_repository }}
+          RESTIC_PASSWORD_FILE=/etc/vpn-service/restic-password
+          {% for key, value in restic_environment | default({}) | dictsort %}
+          {{ key }}={{ value | to_json }}
+          {% endfor %}
+        dest: /etc/vpn-service/backup.env
+        mode: '0600'
+      no_log: true
+    - name: Install backup executable
+      ansible.builtin.copy:
+        src: ../server/backup.sh
+        dest: /usr/local/sbin/vpn-backup
+        mode: '0700'
+    - name: Install backup service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/vpn-backup.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Encrypted private VPN backup
+          [Service]
+          Type=oneshot
+          EnvironmentFile=/etc/vpn-service/backup.env
+          ExecStart=/usr/local/sbin/vpn-backup
+          UMask=0077
+    - name: Install backup timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/vpn-backup.timer
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Daily encrypted VPN backup
+          [Timer]
+          OnCalendar=*-*-* 04:00:00 UTC
+          RandomizedDelaySec=30m
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+    - name: Enable backup timer
+      ansible.builtin.systemd_service:
+        name: vpn-backup.timer
+        enabled: true
+        state: started
+        daemon_reload: true

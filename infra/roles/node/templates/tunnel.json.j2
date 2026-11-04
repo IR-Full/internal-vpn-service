@@ -1,0 +1,1 @@
+{{ {'fleet_id': fleet_id, 'revision': fleet_revision | int, 'backend': vpn_backend, 'private_key': secrets_for_node.vpn_key, 'port': vpn_port | int, 'network': vpn_network, 'address': vpn_address, 'ipv6_network': vpn_ipv6 + '/64', 'ipv6_address': vpn_ipv6, 'peers': secrets_for_node.peers, 'options': amneziawg_options, 'mtu': vpn_mtu} | to_nice_json }}

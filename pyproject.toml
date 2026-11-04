@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=78"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "private-vpn-fleet"
+version = "0.1.0"
+description = "Administrator-only encrypted device registry and two-node VPN infrastructure"
+requires-python = ">=3.11"
+dependencies = ["cryptography>=50.0.0,<51", "PyYAML>=6.0.3,<7"]
+
+[project.optional-dependencies]
+deploy = ["ansible-core>=2.19,<2.22"]
+checks = ["pip-audit>=2.9,<3", "Jinja2>=3.1.6,<4"]
+
+[project.scripts]
+vpnctl = "vpn_fleet.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

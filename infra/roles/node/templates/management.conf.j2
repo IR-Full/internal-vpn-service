@@ -1,0 +1,11 @@
+[Interface]
+Address = {{ mgmt_address }}/30
+ListenPort = 51821
+PrivateKey = {{ secrets_for_node.mgmt_key }}
+MTU = 1380
+
+[Peer]
+PublicKey = {{ mgmt_peer_public_key }}
+AllowedIPs = {{ mgmt_peer_address }}/32
+Endpoint = {{ mgmt_peer_endpoint }}:51821
+PersistentKeepalive = 25

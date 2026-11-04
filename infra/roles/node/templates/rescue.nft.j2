@@ -1,0 +1,13 @@
+table inet vpn_service {
+  chain input {
+    type filter hook input priority filter; policy drop;
+    iifname "lo" accept
+    ct state established,related accept
+    ip protocol icmp accept
+    meta l4proto ipv6-icmp accept
+    ip saddr { {{ admin_cidrs | join(', ') }} } tcp dport 22 accept
+    iifname "{{ ansible_facts.default_ipv4.interface }}" udp sport 67 udp dport 68 accept
+  }
+  chain forward { type filter hook forward priority filter; policy drop; }
+}
+table ip vpn_nat { }
