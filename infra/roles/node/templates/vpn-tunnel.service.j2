@@ -6,7 +6,10 @@ Requires=vpn-firewall.service
 
 [Service]
 Type=oneshot
+RuntimeDirectory=vpn-service
+RuntimeDirectoryMode=0700
 ExecStart=/usr/local/sbin/vpn-node-apply /etc/vpn-service/tunnel.json
+ExecStop=/usr/sbin/ip link delete dev vpn0
 RemainAfterExit=yes
 UMask=0077
 NoNewPrivileges=yes

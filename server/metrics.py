@@ -21,6 +21,7 @@ def certificate_expiry(path):
 
 def collect(config):
     metrics = {"vpn_probe_timestamp_seconds": time.time()}
+    security_checks = {"revision": False, "firewall": False, "auth_log": False}
     # An unreadable/malformed certificate produces zero, which must alert immediately.
     metrics["vpn_telemetry_certificate_expiry_timestamp_seconds"] = min(
         certificate_expiry(Path("/etc/vpn-service") / name)
@@ -36,7 +37,10 @@ def collect(config):
         metrics["vpn_interface_up"] = 0
     try:
         ack = json.loads(Path("/var/lib/vpn-service/ack.json").read_text())
+        if type(ack["revision"]) is not int or ack["revision"] < 1:
+            raise ValueError("Invalid acknowledgement revision")
         metrics["vpn_fleet_revision"] = ack["revision"]
+        security_checks["revision"] = True
     except Exception:
         metrics["vpn_fleet_revision"] = 0
     usage = shutil.disk_usage("/")
@@ -48,10 +52,13 @@ def collect(config):
     try:
         counters = subprocess.run(["nft", "-j", "list", "counters", "table", "inet", "vpn_service"],
                                   check=True, text=True, capture_output=True, timeout=5)
+        found = set()
         for entry in json.loads(counters.stdout)["nftables"]:
             counter = entry.get("counter", {})
             if counter.get("name") in ("input_drops", "forward_drops"):
                 metrics["vpn_firewall_" + counter["name"] + "_total"] = counter["packets"]
+                found.add(counter["name"])
+        security_checks["firewall"] = found == {"input_drops", "forward_drops"}
     except Exception:
         pass
     try:
@@ -60,8 +67,11 @@ def collect(config):
         metrics["vpn_admin_auth_failures_5m"] = sum(any(event in line for event in
             ("Failed publickey", "Failed keyboard-interactive", "authentication failure", "Invalid user"))
             for line in journal.stdout.splitlines())
+        security_checks["auth_log"] = True
     except Exception:
         metrics["vpn_admin_auth_failures_5m"] = 0
+    # Zero failed logins is meaningful only if the log could actually be read.
+    metrics["vpn_security_probe_up"] = int(all(security_checks.values()))
     try:
         context = ssl.create_default_context(cafile="/etc/vpn-service/telemetry-ca.pem")
         context.load_cert_chain("/etc/vpn-service/telemetry-cert.pem", "/etc/vpn-service/telemetry-key.pem")

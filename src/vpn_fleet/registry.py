@@ -37,12 +37,43 @@ def private_directory(path: Path) -> None:
     if path.is_symlink():
         raise FleetError("Private directory must not be a symlink")
     if os.name == "nt":
-        # ACLs, not chmod, enforce privacy on Windows. No shell interpolation.
-        sid = subprocess.check_output(["whoami", "/user", "/fo", "csv", "/nh"], text=True)
-        import csv
-        identity = next(csv.reader([sid.strip()]))[1]
-        subprocess.run(["icacls", str(path), "/inheritance:r", "/grant:r",
-                        f"*{identity}:(OI)(CI)F"], check=True, capture_output=True)
+        # Replace the entire DACL: removing inheritance and granting the owner alone
+        # would leave pre-existing explicit Everyone/Users grants in place.
+        script = """
+$ErrorActionPreference = 'Stop'
+$target = $env:VPN_FLEET_PRIVATE_PATH
+$directory = [IO.DirectoryInfo]::new($target)
+if (($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    throw 'Private directory must not be a reparse point'
+}
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent().User
+$security = [Security.AccessControl.DirectorySecurity]::new()
+$security.SetAccessRuleProtection($true, $false)
+$rule = [Security.AccessControl.FileSystemAccessRule]::new(
+    $identity, [Security.AccessControl.FileSystemRights]::FullControl,
+    [Security.AccessControl.InheritanceFlags]'ContainerInherit,ObjectInherit',
+    [Security.AccessControl.PropagationFlags]::None,
+    [Security.AccessControl.AccessControlType]::Allow)
+$security.AddAccessRule($rule)
+$directory.SetAccessControl($security)
+$actual = $directory.GetAccessControl()
+$rules = @($actual.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+if (-not $actual.AreAccessRulesProtected -or $rules.Count -ne 1 -or
+    $rules[0].IdentityReference.Value -ne $identity.Value -or
+    $rules[0].AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
+    $rules[0].FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl) {
+    throw 'Private directory ACL verification failed'
+}
+"""
+        executable = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+        # Preserve a final junction/reparse point so the helper can reject it.
+        environment = {**os.environ, "VPN_FLEET_PRIVATE_PATH": str(path.absolute())}
+        try:
+            subprocess.run([str(executable), "-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand",
+                            base64.b64encode(script.encode("utf-16-le")).decode()],
+                           env=environment, check=True, capture_output=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            raise FleetError("Cannot enforce private Windows ACLs; use a local filesystem supporting protected ACLs") from None
     else:
         path.chmod(0o700)
 

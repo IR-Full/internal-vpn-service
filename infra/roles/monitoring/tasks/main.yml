@@ -169,7 +169,7 @@
   ansible.builtin.systemd_service:
     name: nginx
     enabled: true
-    state: "{{ 'restarted' if telemetry_gateway.changed else 'started' }}"
+    state: "{{ 'restarted' if telemetry_gateway.changed or telemetry_credentials.changed else 'started' }}"
     daemon_reload: true
   when: monitoring_node | bool
 

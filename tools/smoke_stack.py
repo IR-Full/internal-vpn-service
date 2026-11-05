@@ -92,7 +92,7 @@ p.write_text(yaml.safe_dump(v))
             return json.loads(result.stdout)
         assert len(get("/api/datasources")) == 2
         assert get("/api/dashboards/uid/private-vpn-fleet")["dashboard"]["title"].startswith("Private VPN")
-        assert len(get("/api/v1/provisioning/alert-rules")) == 11
+        assert len(get("/api/v1/provisioning/alert-rules")) == 12
         contacts = get("/api/v1/provisioning/contact-points")
         assert {item["type"] for item in contacts if item["name"] == "fleet-admin"} == {"email", "telegram"}
         anonymous = command("docker", "exec", name, "wget", "-q", "-O", "-", "http://127.0.0.1:3000/api/datasources", check=False)
@@ -100,7 +100,7 @@ p.write_text(yaml.safe_dump(v))
         result = command("docker", "run", "--rm", "--network", "container:" + names[0], "-v", f"{root}:/workspace:ro", "-w", "/workspace",
                          "vpn-service-tools:local", "python", "tests/monitoring_probe.py")
         print(result.stdout.strip())
-        print("PASS: dashboard, 2 data sources, 11 alert rules, both test contacts; anonymous API denied.")
+        print("PASS: dashboard, 2 data sources, 12 alert rules, both test contacts; anonymous API denied.")
     except Exception:
         # Test-only containers hold no real credentials. Keep diagnostics short and local.
         for container in names:

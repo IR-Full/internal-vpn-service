@@ -13,6 +13,7 @@ RULES = [
     ("certificate", "Telemetry certificate expires within 30 days or cannot be read", "30 * 86400 - (vpn_telemetry_certificate_expiry_timestamp_seconds - time())", 0, "5m"),
     ("revision", "VPN nodes have different configuration revisions", "max(vpn_fleet_revision) - min(vpn_fleet_revision)", 0, "5m"),
     ("auth", "Repeated administrative authentication failures", "vpn_admin_auth_failures_5m", 10, "1m"),
+    ("security-probe", "Security telemetry cannot read authentication, firewall or revision state", "1 - vpn_security_probe_up", 0, "1m"),
     ("ddos", "Possible flood: high packet rate and firewall drops", '(sum by(node)(rate(node_network_receive_packets_total{device!~"lo|vpn0|wg-mgmt|docker.*|veth.*|br-.*"}[2m])) > bool 200000) * (sum by(node)(rate(vpn_firewall_input_drops_total[2m])) > bool 10000)', 0, "1m"),
 ]
 rules = []

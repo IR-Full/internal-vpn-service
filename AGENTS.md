@@ -15,6 +15,7 @@
 - Templates/Ansible: the same container with `python tools/validate_local.py`.
 - Kernel integration: see README.md; capabilities apply only to the networkless disposable test container.
 - Grafana and log pipeline smoke tests: `python tools/smoke_stack.py` and `python tools/check_log_privacy.py` on the Docker host.
+- Native gateway mTLS/rotation: the tooling container with `--network none` and `python tests/telemetry_lab.py`. Native Windows ACL regressions: `python -m unittest discover -s tests -p test_windows_acl.py -v` on Windows with cryptography installed; Linux skips them.
 - Grafana uses the official slim image plus exactly two checksum-pinned, signature-verified plugins. Scan the four images and both plugin Go binaries with `python tools/scan_images.py`; use `rootfs` for plugin binaries, not `fs`. Do not preinstall unpinned plugins or disable signatures.
 - `docs/acceptance.md` describes real VPS/client tests. Do not replace their evidence with local Docker throughput or configured boolean flags.
 - No remote publication, production deployment or notification sending is performed automatically by tests.

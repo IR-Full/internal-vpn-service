@@ -27,6 +27,7 @@ def metrics():
                   "vpn_telemetry_reachable": 1, "vpn_backup_success_timestamp_seconds": now,
                   "vpn_telemetry_certificate_expiry_timestamp_seconds": now + (86400 if PHASE == "certificate-a" and node == "vpn_a" else 100 * 86400),
                   "vpn_admin_auth_failures_5m": 0, "vpn_fleet_revision": 4,
+                  "vpn_security_probe_up": 0 if PHASE == "security-probe-a" and node == "vpn_a" else 1,
                   "node_memory_MemAvailable_bytes": 8e9, "node_memory_MemTotal_bytes": 12e9,
                   "vpn_firewall_input_drops_total": 0}
         lines.extend(f'{key}{{node="{node}"}} {value}\n' for key, value in values.items())
@@ -125,8 +126,12 @@ def run():
     certificate = next(r for r in rules if r["uid"] == "vpn-certificate")
     eventually(lambda: alert_states(certificate["title"]) == {"vpn_a": "Alerting", "vpn_b": "Normal"},
                "certificate expiry alert with healthy second node")
+    PHASE = "security-probe-a"
+    security_probe = next(r for r in rules if r["uid"] == "vpn-security-probe")
+    eventually(lambda: alert_states(security_probe["title"]) == {"vpn_a": "Alerting", "vpn_b": "Normal"},
+               "failed security observation is not interpreted as no incidents")
     server.shutdown()
-    print("PASS: real Prometheus and Loki queries through Grafana; all alert expressions; missing/stale node, per-node firing/recovery and certificate expiry. No external network or notification delivery.")
+    print("PASS: real Prometheus and Loki queries through Grafana; all alert expressions; missing/stale node, per-node firing/recovery, certificate expiry and failed security probe. No external network or notification delivery.")
 
 
 if __name__ == "__main__": run()

@@ -21,6 +21,8 @@ jobs:
         run: docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/workspace" -w /workspace vpn-service-tools:local
       - name: Template and Ansible validation
         run: docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/workspace" -w /workspace vpn-service-tools:local python tools/validate_local.py
+      - name: Verify native mTLS gateway and credential rotation, no internet
+        run: docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/workspace:ro" -w /workspace vpn-service-tools:local python tests/telemetry_lab.py
       - name: Kernel tunnel and firewall test, no internet in lab
         run: docker run --rm --network none --cap-add NET_ADMIN --cap-add SYS_ADMIN --security-opt apparmor=unconfined --sysctl net.ipv4.ip_forward=1 --sysctl net.ipv6.conf.all.forwarding=0 -v "$PWD:/workspace" -w /workspace vpn-service-tools:local python tests/network_lab.py
       - name: Dependency audit
@@ -31,3 +33,19 @@ jobs:
         run: python3 tools/smoke_stack.py
       - name: Verify log sanitisation through real Alloy and Loki
         run: python3 tools/check_log_privacy.py
+  windows-acl:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: '${{ github.workspace }}/src'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, immutable
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, immutable
+        with:
+          python-version: '3.12'
+      - name: Install registry cryptography dependency
+        run: python -m pip install cryptography==50.0.2
+      - name: Verify native Windows ACLs and atomic secret writes
+        run: python -m unittest discover -s tests -p test_windows_acl.py -v
