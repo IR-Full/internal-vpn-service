@@ -46,10 +46,18 @@ $directory = [IO.DirectoryInfo]::new($target)
 if (($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
     throw 'Private directory must not be a reparse point'
 }
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent().User
+$account = [Security.Principal.WindowsIdentity]::GetCurrent()
+$identity = $account.User
 $sidType = [Security.Principal.SecurityIdentifier]
-if ($directory.GetAccessControl().GetOwner($sidType).Value -ne $identity.Value) {
-    throw 'Private directory must be owned by the current user'
+$principal = [Security.Principal.WindowsPrincipal]::new($account)
+$isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+function Test-TrustedOwner($acl) {
+    $owner = $acl.GetOwner($sidType).Value
+    # Elevated Windows tokens may create directories owned by local Administrators.
+    return ($owner -eq $identity.Value -or ($isAdmin -and $owner -eq 'S-1-5-32-544'))
+}
+if (-not (Test-TrustedOwner ($directory.GetAccessControl()))) {
+    throw 'Private directory must have a trusted owner'
 }
 $security = [Security.AccessControl.DirectorySecurity]::new()
 $security.SetAccessRuleProtection($true, $false)
@@ -62,7 +70,7 @@ $security.AddAccessRule($rule)
 $directory.SetAccessControl($security)
 $actual = $directory.GetAccessControl()
 $rules = @($actual.GetAccessRules($true, $true, $sidType))
-if ($actual.GetOwner($sidType).Value -ne $identity.Value -or
+if (-not (Test-TrustedOwner $actual) -or
     -not $actual.AreAccessRulesProtected -or $rules.Count -ne 1 -or
     $rules[0].IdentityReference.Value -ne $identity.Value -or
     $rules[0].AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or

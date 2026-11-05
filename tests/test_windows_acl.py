@@ -28,7 +28,12 @@ $target = $env:VPN_FLEET_ACL_TEST_PATH
 if ([IO.Directory]::Exists($target)) { $item = [IO.DirectoryInfo]::new($target) }
 else { $item = [IO.FileInfo]::new($target) }
 $acl = $item.GetAccessControl()
-[Console]::WriteLine('owner_sid=' + $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value)
+$account = [Security.Principal.WindowsIdentity]::GetCurrent()
+$owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+$principal = [Security.Principal.WindowsPrincipal]::new($account)
+$isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+[Console]::WriteLine('account_sid=' + $account.User.Value)
+[Console]::WriteLine('trusted_owner=' + ($owner -eq $account.User.Value -or ($isAdmin -and $owner -eq 'S-1-5-32-544')))
 [Console]::WriteLine('protected=' + $acl.AreAccessRulesProtected)
 foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
     [Console]::WriteLine(('{0}|{1}|{2}|{3}' -f $rule.IdentityReference.Value,
@@ -42,10 +47,11 @@ foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.Security
                                 check=True, capture_output=True, text=True, timeout=30)
         lines = result.stdout.splitlines()
         rules = []
-        for line in lines[2:]:
+        for line in lines[3:]:
             sid, rights, inherited, allow = line.split("|")
             rules.append({"sid": sid, "rights": int(rights), "inherited": inherited.lower() == "true", "allow": allow.lower() == "true"})
-        return {"owner_sid": lines[0].split("=", 1)[1], "protected": lines[1].split("=", 1)[1].lower() == "true", "rules": rules}
+        return {"account_sid": lines[0].split("=", 1)[1], "trusted_owner": lines[1].split("=", 1)[1].lower() == "true",
+                "protected": lines[2].split("=", 1)[1].lower() == "true", "rules": rules}
 
     def test_explicit_other_user_grants_are_removed_before_atomic_secret_write(self):
         root = Path(".state/security-audit-acl").resolve(); root.mkdir(parents=True, exist_ok=True)
@@ -61,12 +67,13 @@ foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.Security
             for path in (directory, target):
                 acl = self.acl(path)
                 self.assertEqual(len(acl["rules"]), 1)
-                self.assertEqual(acl["rules"][0]["sid"], acl["owner_sid"])
+                self.assertTrue(acl["trusted_owner"])
+                self.assertEqual(acl["rules"][0]["sid"], acl["account_sid"])
                 self.assertTrue(acl["rules"][0]["allow"])
             self.assertTrue(self.acl(directory)["protected"])
             # Replacement also inherits only the repaired private directory ACL.
             r.atomic_write(target, b"replacement synthetic test value")
-            self.assertEqual({a["sid"] for a in self.acl(target)["rules"]}, {self.acl(directory)["owner_sid"]})
+            self.assertEqual({a["sid"] for a in self.acl(target)["rules"]}, {self.acl(directory)["account_sid"]})
 
     def test_new_directory_and_path_metacharacters_remain_private(self):
         root = Path(".state/security-audit-acl").resolve(); root.mkdir(parents=True, exist_ok=True)
@@ -76,4 +83,5 @@ foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.Security
             r.atomic_write(directory / "synthetic.txt", b"synthetic fixture")
             for path in (directory, directory / "synthetic.txt"):
                 acl = self.acl(path)
-                self.assertEqual({a["sid"] for a in acl["rules"]}, {acl["owner_sid"]})
+                self.assertTrue(acl["trusted_owner"])
+                self.assertEqual({a["sid"] for a in acl["rules"]}, {acl["account_sid"]})
