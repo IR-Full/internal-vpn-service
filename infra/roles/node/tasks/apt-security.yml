@@ -1,0 +1,70 @@
+---
+# CVE-2026-109518: Ubuntu Noble is fixed in 2.8.4ubuntu0.1.
+# Do not use ansible.builtin.apt until this gate succeeds: the module can install
+# python3-apt automatically using the vulnerable acquisition backend.
+# https://ubuntu.com/security/CVE-2026-109518
+# https://ubuntu.com/blog/apt-vulnerability-fixes-available
+- name: Limit APT bootstrap policy to the supported Ubuntu release
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Ubuntu'
+      - ansible_facts.distribution_version == '24.04'
+    fail_msg: APT security bootstrap is reviewed for Ubuntu 24.04 only.
+
+- name: Read installed APT client and acquisition library versions without package installation
+  ansible.builtin.command:
+    argv: [dpkg-query, -W, '-f=${db:Status-Status} ${Version}', '{{ item }}']
+    expand_argument_vars: false
+  loop: [apt, libapt-pkg6.0t64]
+  register: apt_security_installed
+  changed_when: false
+
+- name: Reject missing or unconfigured APT bootstrap packages
+  ansible.builtin.assert:
+    that:
+      - item.stdout is match('^installed [0-9][^\s]*$')
+    fail_msg: Both apt and libapt-pkg6.0t64 must be installed and have readable Debian versions.
+  loop: '{{ apt_security_installed.results }}'
+
+- name: Compare both installed packages with the Noble security fix using native dpkg semantics
+  ansible.builtin.command:
+    argv: [dpkg, --compare-versions, '{{ item.stdout.split()[1] }}', ge, 2.8.4ubuntu0.1]
+  loop: '{{ apt_security_installed.results }}'
+  register: apt_security_comparison
+  changed_when: false
+  failed_when: apt_security_comparison.rc not in [0, 1]
+
+- name: Update authenticated package indexes with the vulnerable retry path disabled
+  ansible.builtin.command:
+    argv: [apt-get, -o, 'Acquire::Retries=0', -o, 'APT::Update::Error-Mode=any', -o, 'DPkg::Lock::Timeout=120', update]
+  when: apt_security_comparison.results | selectattr('rc', 'equalto', 1) | list | length > 0
+  changed_when: true
+
+- name: Upgrade only the APT client and acquisition library with retries disabled
+  ansible.builtin.command:
+    argv: [apt-get, -o, 'Acquire::Retries=0', -o, 'DPkg::Lock::Timeout=120', install, --only-upgrade, --no-install-recommends, --yes, apt, libapt-pkg6.0t64]
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: apt_security_comparison.results | selectattr('rc', 'equalto', 1) | list | length > 0
+  changed_when: true
+
+- name: Re-read versions after the protected bootstrap upgrade
+  ansible.builtin.command:
+    argv: [dpkg-query, -W, '-f=${db:Status-Status} ${Version}', '{{ item }}']
+    expand_argument_vars: false
+  loop: [apt, libapt-pkg6.0t64]
+  register: apt_security_verified
+  changed_when: false
+
+- name: Require both package versions to be readable before package modules are allowed
+  ansible.builtin.assert:
+    that:
+      - item.stdout is match('^installed [0-9][^\s]*$')
+    fail_msg: APT security update could not be verified; package installation remains blocked.
+  loop: '{{ apt_security_verified.results }}'
+
+- name: Fail closed if the fixed APT packages are not available from authenticated configured repositories
+  ansible.builtin.command:
+    argv: [dpkg, --compare-versions, '{{ item.stdout.split()[1] }}', ge, 2.8.4ubuntu0.1]
+  loop: '{{ apt_security_verified.results }}'
+  changed_when: false

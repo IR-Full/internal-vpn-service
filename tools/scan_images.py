@@ -40,6 +40,17 @@ def report_outcome(raw, report, artifact, returncode):
             "status": "passed" if passed else "failed", "findings": len(findings)}
 
 
+def print_public_findings(path):
+    """Keep CI failures diagnosable without dumping image metadata or full reports."""
+    report = json.loads(path.read_bytes())
+    details = {(v["VulnerabilityID"], v["PkgName"], v["InstalledVersion"], v.get("FixedVersion", ""), v["Severity"])
+               for result in report.get("Results", []) for v in result.get("Vulnerabilities") or []
+               if v["Severity"] in ("HIGH", "CRITICAL")}
+    for vulnerability, package, installed, fixed, severity in sorted(details):
+        print(json.dumps({"id": vulnerability, "package": package, "installed": installed,
+                          "fixed": fixed or None, "severity": severity}), flush=True)
+
+
 def check_plugin_report(path, plugin_id, lock, returncode):
     raw = path.read_bytes(); report = json.loads(raw)
     if (report.get("SchemaVersion") != 2 or report.get("ArtifactType") != "filesystem"
@@ -83,6 +94,7 @@ if __name__ == "__main__":
             reports[key] = {"artifact": data[key], "status": "error"}
         passed = passed and reports[key]["status"] == "passed"
         print(f"{key}: {reports[key]['status']}; HIGH/CRITICAL: {reports[key].get('findings', 'unknown')}", flush=True)
+        if reports[key]["status"] == "failed": print_public_findings(report_path)
     for plugin_id, lock in data["grafana_plugins"].items():
         key = "plugin_" + plugin_id
         report_path = out / f"{key}.json"; report_path.unlink(missing_ok=True)
@@ -97,6 +109,7 @@ if __name__ == "__main__":
             reports[key] = {"artifact": plugin_artifact(plugin_id, lock), "status": "error"}
         passed = passed and reports[key]["status"] == "passed"
         print(f"{key}: {reports[key]['status']}; HIGH/CRITICAL: {reports[key].get('findings', 'unknown')}", flush=True)
+        if reports[key]["status"] == "failed": print_public_findings(report_path)
     data["scan_status"] = "passed" if passed else "failed"
     data["scanner"] = scanner
     data["scan_platform"] = PLATFORM

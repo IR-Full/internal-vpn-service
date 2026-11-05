@@ -1,7 +1,7 @@
 {
   "grafana": "grafana/grafana@sha256:a66f098dd9b2e1b5a19287ff176db02d895122488c6e39b3dfcd3fb897039225",
   "loki": "grafana/loki@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28",
-  "alloy": "grafana/alloy@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4",
+  "alloy": "grafana/alloy@sha256:12ff3a82e402d34b450e7cb0555ff9703da645068dc321b2a98b9f1c110ab9e2",
   "prometheus": "prom/prometheus@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2",
   "grafana_plugins": {
     "loki": {
@@ -16,50 +16,50 @@
     }
   },
   "grafana_plugins_sha256": "fc37cbc90091896372c40d256906385fa45701255ff0956420f3bd12c61b04ba",
-  "images_sha256": "99dbf544ace9f4c80e4dc3718e70460efd484d27d5a4d1638a42ddc87282a2b9",
+  "images_sha256": "20434dab604380d2425413f7be0195c060a186a3bf5d237e4a850559647ad842",
   "scan_status": "passed",
   "scanner": "aquasec/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c",
   "scan_platform": "linux/amd64",
   "scan_policy": "all-high-critical-v1",
-  "scanned_images_sha256": "99dbf544ace9f4c80e4dc3718e70460efd484d27d5a4d1638a42ddc87282a2b9",
-  "scanned_at": "2026-11-04T18:27:55.982303+00:00",
-  "scanned_epoch": 1793816875,
   "scan_reports": {
     "grafana": {
       "artifact": "grafana/grafana@sha256:a66f098dd9b2e1b5a19287ff176db02d895122488c6e39b3dfcd3fb897039225",
-      "sha256": "8551ce32ef83339dc2812fa9ebf9456ea86c5995395232831cb91412f96b813c",
+      "sha256": "782d6909cf16455c5dd3e3e4b3e0f815c70aa7e5fd751f5edfd8a0bbb955187a",
       "status": "passed",
       "findings": 0
     },
     "loki": {
       "artifact": "grafana/loki@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28",
-      "sha256": "fe21b9aa1b61d1ff9617c9a553c33dc0d7c75e0e49ac6bbd0c025808d6ef726a",
+      "sha256": "167e7b18c1e793c2e6e0f1947c453f74aa15bb808e79bb9d84321fc2941e8555",
       "status": "passed",
       "findings": 0
     },
     "alloy": {
-      "artifact": "grafana/alloy@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4",
-      "sha256": "c97e0ab1faee1141d45c30c04b59c699800e99b00e95518cc2011dfc480fdde0",
+      "artifact": "grafana/alloy@sha256:12ff3a82e402d34b450e7cb0555ff9703da645068dc321b2a98b9f1c110ab9e2",
+      "sha256": "e0bde6fa83efb41b136237dba9dd2a6d505bd67df77e1901f4b2b90f8023e082",
       "status": "passed",
       "findings": 0
     },
     "prometheus": {
       "artifact": "prom/prometheus@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2",
-      "sha256": "3ad85f275f1752b58e59d61e16e6dd986f88693889e340a615033f30729be0cd",
+      "sha256": "276e34d2e7f000acbfd57d342e4024addbc88e21bcb4f24feacd296e8cbaff18",
       "status": "passed",
       "findings": 0
     },
     "plugin_loki": {
       "artifact": "grafana-plugin:loki@sha256:982cfb81977352db65404cec671952453454643bd9a6c883041c38be519a74ea",
-      "sha256": "78cbe519568e5da61908609c15e36d4a774f9a6337e4e65b7efcaf67dd3c8930",
+      "sha256": "7496d7cf890426520c1ca28770a938316de9ea3290e1969313bb8b4058efbe67",
       "status": "passed",
       "findings": 0
     },
     "plugin_prometheus": {
       "artifact": "grafana-plugin:prometheus@sha256:d24df3eaff9ae61f00d7e857f508fc306912dcf50d657150d1e472e851799fc4",
-      "sha256": "8470395c3dc94ddb718df4395e7b5563922880dc6504e9c540c7986849a44245",
+      "sha256": "65590947e28f08c9f8aaa83a23a28b1bd50fc8c819ad12cbe144fc1b5f06eba8",
       "status": "passed",
       "findings": 0
     }
-  }
+  },
+  "scanned_images_sha256": "20434dab604380d2425413f7be0195c060a186a3bf5d237e4a850559647ad842",
+  "scanned_at": "2026-11-05T06:34:28.978654+00:00",
+  "scanned_epoch": 1793860468
 }

@@ -1,4 +1,7 @@
 ---
+- name: Patch APT acquisition before any package module can auto-install dependencies
+  ansible.builtin.include_tasks: apt-security.yml
+
 - name: Install maintained distribution packages
   ansible.builtin.apt:
     name: [wireguard-tools, nftables, unbound, openssl, openssh-server, libpam-google-authenticator, unattended-upgrades, auditd, python3, nginx, logrotate, curl, ca-certificates, docker.io, docker-compose-v2, restic]

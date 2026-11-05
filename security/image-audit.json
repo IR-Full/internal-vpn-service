@@ -1,5 +1,5 @@
 {
-  "scanned_at": "2026-11-04T18:27:55.982303+00:00",
+  "scanned_at": "2026-11-05T06:34:28.978654+00:00",
   "scanner": "aquasec/trivy@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c",
   "status": "passed",
   "platform": "linux/amd64",
@@ -9,7 +9,7 @@
     {
       "name": "grafana",
       "image": "grafana/grafana@sha256:a66f098dd9b2e1b5a19287ff176db02d895122488c6e39b3dfcd3fb897039225",
-      "report_sha256": "8551ce32ef83339dc2812fa9ebf9456ea86c5995395232831cb91412f96b813c",
+      "report_sha256": "782d6909cf16455c5dd3e3e4b3e0f815c70aa7e5fd751f5edfd8a0bbb955187a",
       "go_versions": [
         "v1.27.3"
       ],
@@ -19,7 +19,7 @@
     {
       "name": "loki",
       "image": "grafana/loki@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28",
-      "report_sha256": "fe21b9aa1b61d1ff9617c9a553c33dc0d7c75e0e49ac6bbd0c025808d6ef726a",
+      "report_sha256": "167e7b18c1e793c2e6e0f1947c453f74aa15bb808e79bb9d84321fc2941e8555",
       "go_versions": [
         "v1.26.10"
       ],
@@ -28,8 +28,8 @@
     },
     {
       "name": "alloy",
-      "image": "grafana/alloy@sha256:8ab871206bd2d8f89277f53abffee5f452a293980788d52f85fa183a87a505a4",
-      "report_sha256": "c97e0ab1faee1141d45c30c04b59c699800e99b00e95518cc2011dfc480fdde0",
+      "image": "grafana/alloy@sha256:12ff3a82e402d34b450e7cb0555ff9703da645068dc321b2a98b9f1c110ab9e2",
+      "report_sha256": "e0bde6fa83efb41b136237dba9dd2a6d505bd67df77e1901f4b2b90f8023e082",
       "go_versions": [
         "v1.27.3"
       ],
@@ -39,7 +39,7 @@
     {
       "name": "prometheus",
       "image": "prom/prometheus@sha256:fa3302279710be2f21a8301ec17a8b4f2301fd829bd113839b3b6b02b6f191a2",
-      "report_sha256": "3ad85f275f1752b58e59d61e16e6dd986f88693889e340a615033f30729be0cd",
+      "report_sha256": "276e34d2e7f000acbfd57d342e4024addbc88e21bcb4f24feacd296e8cbaff18",
       "go_versions": [
         "v1.27.3"
       ],
@@ -49,7 +49,7 @@
     {
       "name": "plugin_loki",
       "image": "grafana-plugin:loki@sha256:982cfb81977352db65404cec671952453454643bd9a6c883041c38be519a74ea",
-      "report_sha256": "78cbe519568e5da61908609c15e36d4a774f9a6337e4e65b7efcaf67dd3c8930",
+      "report_sha256": "7496d7cf890426520c1ca28770a938316de9ea3290e1969313bb8b4058efbe67",
       "go_versions": [
         "v1.27.3"
       ],
@@ -59,7 +59,7 @@
     {
       "name": "plugin_prometheus",
       "image": "grafana-plugin:prometheus@sha256:d24df3eaff9ae61f00d7e857f508fc306912dcf50d657150d1e472e851799fc4",
-      "report_sha256": "8470395c3dc94ddb718df4395e7b5563922880dc6504e9c540c7986849a44245",
+      "report_sha256": "65590947e28f08c9f8aaa83a23a28b1bd50fc8c819ad12cbe144fc1b5f06eba8",
       "go_versions": [
         "v1.27.3"
       ],

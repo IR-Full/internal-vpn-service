@@ -13,6 +13,7 @@
 - Build controller tooling: `docker build -f tools/Dockerfile -t vpn-service-tools:local .`
 - Unit/CLI tests: `docker run --rm -v "$PWD:/workspace" -w /workspace vpn-service-tools:local`
 - Templates/Ansible: the same container with `python tools/validate_local.py`.
+- Early APT bootstrap contract: the tooling container with `--network none` and `python tests/apt_bootstrap_lab.py`; acquisition is synthetic, version comparisons and Ansible tasks are real.
 - Kernel integration: see README.md; capabilities apply only to the networkless disposable test container.
 - Grafana and log pipeline smoke tests: `python tools/smoke_stack.py` and `python tools/check_log_privacy.py` on the Docker host.
 - Native gateway mTLS/rotation: the tooling container with `--network none` and `python tests/telemetry_lab.py`. Native Windows ACL regressions: `python -m unittest discover -s tests -p test_windows_acl.py -v` on Windows with cryptography installed; Linux skips them.

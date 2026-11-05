@@ -21,6 +21,8 @@ jobs:
         run: docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/workspace" -w /workspace vpn-service-tools:local
       - name: Template and Ansible validation
         run: docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/workspace" -w /workspace vpn-service-tools:local python tools/validate_local.py
+      - name: Verify early APT security gate, synthetic acquisition without network
+        run: docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/workspace:ro" -w /workspace vpn-service-tools:local python tests/apt_bootstrap_lab.py
       - name: Verify native mTLS gateway and credential rotation, no internet
         run: docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/workspace:ro" -w /workspace vpn-service-tools:local python tests/telemetry_lab.py
       - name: Kernel tunnel and firewall test, no internet in lab

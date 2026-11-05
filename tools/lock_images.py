@@ -15,7 +15,7 @@ from vpn_fleet.plugins import plugin_hash
 RELEASES = {
     "grafana": ("grafana/grafana", "grafana/grafana", "13.3.0-slim"),
     "loki": ("grafana/loki", "grafana/loki", "3.7.9"),
-    "alloy": ("grafana/alloy", "grafana/alloy", "v1.21.3"),
+    "alloy": ("grafana/alloy", "grafana/alloy", "v1.21.3-distroless"),
     "prometheus": ("prometheus/prometheus", "prom/prometheus", "v3.15.1"),
 }
 
