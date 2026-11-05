@@ -122,7 +122,6 @@
   loop:
     - {src: firewall.nft.j2, dest: firewall.nft}
     - {src: rescue.nft.j2, dest: firewall-rescue.nft}
-  register: firewall_config
   tags: [firewall]
 
 - name: Install systemd services

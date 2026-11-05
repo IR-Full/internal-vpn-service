@@ -27,6 +27,8 @@ table inet vpn_service {
     type filter hook forward priority filter; policy drop;
     ct state invalid drop
     iifname "vpn0" ip daddr @forbidden_v4 counter name forward_drops drop
+    # NAT would otherwise make a client appear to be this host at the peer's management port.
+    iifname "vpn0" ip daddr {{ mgmt_peer_endpoint }} udp dport 51821 counter name forward_drops drop
     # IPv6 user traffic is captured by the tunnel and intentionally rejected; never bypassed.
     iifname "vpn0" meta nfproto ipv6 counter name forward_drops reject with icmpv6 type admin-prohibited
     iifname "vpn0" oifname "{{ ansible_facts.default_ipv4.interface }}" ip saddr {{ vpn_network }} accept

@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 import yaml
 
-from .registry import FleetError, atomic_write, private_directory
+from .registry import FleetError, atomic_write, private_directory, validate_fleet
 from .image_policy import validate_scan
 
 
@@ -62,12 +62,14 @@ def prepare_credentials(state: dict) -> None:
 
 
 def render(state: dict, output: Path, password: str, images: dict) -> None:
+    validate_fleet(state["fleet"])
     try:
         from ansible.parsing.vault import VaultLib, VaultSecret
     except ImportError:
         raise FleetError("Rendering requires the deploy extra in a Linux controller or tooling container") from None
     prepare_credentials(state)
     private_directory(output)
+    deployment_id = secrets.token_hex(16)
     hostvars, node_secrets = {}, {}
     for node in state["fleet"]["nodes"]:
         node_id = node["id"]
@@ -94,16 +96,18 @@ def render(state: dict, output: Path, password: str, images: dict) -> None:
                             "monitoring_node": node_id == "vpn_b"}
     inventory = {"all": {"children": {"vpn": {"hosts": hostvars}},
                          "vars": {"fleet_id": state["fleet_id"], "fleet_revision": state["revision"],
+                                  "deployment_id": deployment_id,
                                   "admin_cidrs": state["fleet"]["admin_cidrs"],
                                   "admin_public_key": state["fleet"]["admin_public_key"],
                                   "telemetry_ca": state["pki"]["ca"], "images": images}}}
     vault = VaultLib([("default", VaultSecret(password.encode()))])
     from .notifications import provisioning
     settings = state.get("alerting", {})
-    encrypted = vault.encrypt(yaml.safe_dump({"node_secrets": node_secrets,
+    encrypted = vault.encrypt(yaml.safe_dump({"vault_deployment_id": deployment_id,
+                                              "node_secrets": node_secrets,
                                               "grafana_secrets": state["grafana"],
                                               "alerting_settings": settings,
                                               "alerting_provisioning": provisioning(settings) if settings else {}}).encode())
-    # Publish credentials first, inventory last. Subsequent renders preserve credentials.
+    # The playbooks reject an inventory and vault read across different renders.
     atomic_write(output / "group_vars" / "all" / "vault.yml", encrypted)
     atomic_write(output / "inventory.json", json.dumps(inventory, indent=2).encode())

@@ -1,6 +1,7 @@
 import copy
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -75,6 +76,12 @@ class RegistryTests(unittest.TestCase):
 
     def test_input_injection_and_unsafe_networks_rejected(self):
         with self.assertRaises(r.FleetError): r.add_user(self.state, "../secret")
+        invalid = fleet(); invalid["nodes"][0]["port"] = 51821
+        with self.assertRaisesRegex(r.FleetError, "reserved for the management tunnel"):
+            r.create_registry(invalid)
+        legacy = copy.deepcopy(self.state)
+        legacy["fleet"] = invalid
+        self.assertEqual(r.decrypt(r.encrypt(legacy, PASSWORD), PASSWORD)["fleet"], invalid)
         for cidr in ["0.0.0.0/0", "10.0.0.0/24"]:
             data = fleet(); data["admin_cidrs"] = [cidr]
             with self.assertRaises(r.FleetError): r.validate_fleet(data)
@@ -103,6 +110,29 @@ class RegistryTests(unittest.TestCase):
             plaintext = yaml.safe_load(vault.decrypt((output / "group_vars/all/vault.yml").read_bytes()))
             self.assertEqual(plaintext["node_secrets"]["vpn_a"]["peers"], [])
             self.assertEqual(plaintext["node_secrets"]["vpn_b"]["peers"], [])
+
+    def test_peers_playbook_rejects_vault_from_a_different_render_at_same_revision(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            output = root / "deployment"
+            inventory = output / "inventory.json"
+            password_file = root / "vault-password-test-only"
+            password_file.write_text(PASSWORD)
+            command = [
+                "ansible-playbook", "-i", str(inventory), "-c", "local",
+                "--vault-password-file", str(password_file),
+                "--tags", "deployment-integrity", "--limit", "vpn_a", "infra/peers.yml",
+            ]
+            render(self.state, output, PASSWORD, {})
+            first_inventory = inventory.read_bytes()
+            matching = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertEqual(matching.returncode, 0, matching.stdout + matching.stderr)
+            self.assertIn("Require inventory and encrypted variables from the same deployment render", matching.stdout)
+            render(self.state, output, PASSWORD, {})
+            inventory.write_bytes(first_inventory)
+            mixed = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertNotEqual(mixed.returncode, 0)
+            self.assertIn("Render a fresh deployment bundle", mixed.stdout + mixed.stderr)
 
     def test_no_clobber_and_lock_exclusion(self):
         with tempfile.TemporaryDirectory() as folder:

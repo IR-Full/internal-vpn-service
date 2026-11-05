@@ -29,7 +29,9 @@
       register: verify_firewall
     - name: Reject rollback or pending firewall state
       ansible.builtin.assert:
-        that: (verify_firewall.stdout | from_json).status == 'confirmed'
+        that:
+          - (verify_firewall.stdout | from_json).status == 'confirmed'
+          - not (verify_firewall.stdout | from_json).needs_apply
     - name: Require last successful backup newer than 26 hours
       ansible.builtin.command:
         argv: [python3, -c, "import time,pathlib; assert time.time()-int(pathlib.Path('/var/lib/vpn-service/backup-success').read_text()) < 93600"]

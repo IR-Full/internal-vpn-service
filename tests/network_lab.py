@@ -68,7 +68,9 @@ if __name__ == "__main__":
                 for route in ["10.77.0.0/23", "198.51.100.4/32", "169.254.169.254/32"]:
                     ns(name, "ip", "route", "add", route, "dev", "clientwg")
                 ns(name, "ip", "-6", "route", "add", "default", "dev", "clientwg")
-            run("nft", "-f", ".state/validation/vpn_a/firewall.nft")
+            # Map the rendered management peer endpoint to the isolated upstream namespace.
+            policy = Path(".state/validation/vpn_a/firewall.nft").read_text().replace("1.1.1.1", "198.51.100.4")
+            run("nft", "-f", "-", input=policy)
             run("ip", "route", "add", "169.254.169.254/32", "via", "198.51.100.4")
             ns("internet", "ip", "address", "add", "169.254.169.254/32", "dev", "lo")
             ping("client1", "10.77.0.1")
@@ -80,6 +82,13 @@ if __name__ == "__main__":
             query = "import socket,struct; q=struct.pack('!HHHHHH',123,256,1,0,0,0)+b'\\x03lab\\x07invalid\\x00'+struct.pack('!HH',1,1); s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.settimeout(2); s.sendto(q,('10.77.0.1',53)); a=s.recv(512); assert a[:2]==q[:2] and b'\\xc6\\x33\\x64\\x04' in a"
             ns("client1", "python", "-c", query)
             ping("client1", "198.51.100.4")  # NAT path, not a direct /24 shortcut.
+            def forward_drops():
+                counters = json.loads(run("nft", "-j", "list", "counter", "inet", "vpn_service", "forward_drops").stdout)
+                return next(entry["counter"]["packets"] for entry in counters["nftables"] if "counter" in entry)
+
+            before = forward_drops()
+            ns("client1", "python", "-c", "import socket; socket.socket(socket.AF_INET, socket.SOCK_DGRAM).sendto(b'lab', ('198.51.100.4', 51821))")
+            assert forward_drops() > before, "Client can reach the peer management UDP listener via NAT"
             ping("client1", "10.77.0.3", expected=False)
             ping("client1", "169.254.169.254", expected=False)
             result = ns("client1", "ping", "-6", "-n", "-c", "1", "-W", "1", "2606:4700:4700::1111", ok=False)
@@ -95,7 +104,21 @@ if __name__ == "__main__":
                 raise AssertionError("Stale revision resurrected revoked peer")
             except ValueError:
                 pass
-            print("PASS: encrypted handshake, private DNS, routed IPv4/NAT, client isolation, metadata protection, IPv6 capture, selective revocation and stale-state rejection.")
+            stale_config = temp / "tunnel.json"
+            stale_config.write_text(json.dumps(older))
+            run("ip", "link", "delete", "dev", "vpn0")
+            node.apply(None, temp / "server-state", boot_fallback=stale_config)
+            assert run("wg", "show", "vpn0", "peers").stdout.split() == [data["peers"][0]["public_key"]]
+            ping("client1", "10.77.0.1", expected=False)
+            # The surviving client may still be using its pre-restart session keys.
+            for _ in range(25):
+                if ns("client2", "ping", "-n", "-c", "1", "-W", "1", "10.77.0.1", ok=False).returncode == 0:
+                    break
+            else:
+                raise AssertionError("Surviving peer could not establish a new session after restart")
+            ack = json.loads((temp / "server-state" / "ack.json").read_text())
+            assert ack["revision"] == data["revision"]
+            print("PASS: encrypted handshake, private DNS, routed IPv4/NAT, client isolation, metadata protection, IPv6 capture, selective revocation and restart after stale-state rejection.")
         finally:
             for process in processes: process.terminate()
             for name in names: run("ip", "netns", "delete", name, ok=False)

@@ -8,6 +8,7 @@
     admin_user: vpnadmin
     secrets_for_node: "{{ node_secrets[inventory_hostname] }}"
   pre_tasks:
+    - ansible.builtin.import_tasks: tasks/check-deployment.yml
     - name: Require supported operating system and complete inventory
       ansible.builtin.assert:
         that:
@@ -17,6 +18,7 @@
           - admin_cidrs | length > 0
           - admin_public_key is match('^(ssh-ed25519|sk-ssh-ed25519@openssh.com) ')
           - vpn_backend in ['wireguard', 'amneziawg']
+          - vpn_port | int != 51821
           - fleet_revision | int > 0
           - ansible_facts.default_ipv4.interface is match('^[a-zA-Z0-9_.:-]+$')
         fail_msg: Use Ubuntu 24.04 x86_64 and a generated inventory with encrypted group variables.
@@ -40,15 +42,21 @@
     - node
     - monitoring
   post_tasks:
+    - name: Check whether the intended firewall policy still needs confirmation
+      ansible.builtin.command: /usr/local/sbin/vpn-firewall status
+      changed_when: false
+      register: firewall_before_stage
+      tags: [firewall]
     - name: Stage networking only after all potentially slow installation steps
       ansible.builtin.command: /usr/local/sbin/vpn-firewall apply
-      when: firewall_config.changed
+      when: (firewall_before_stage.stdout | from_json).needs_apply
       changed_when: true
+      register: firewall_stage
       tags: [firewall]
     - name: Wait for operator to verify a new SSH connection and confirm firewall
       ansible.builtin.pause:
         prompt: "Open a FRESH SSH connection to {{ ansible_host }}, run sudo vpn-firewall confirm within 120s, then press Enter. A timeout rolls back to last-good/rescue policy."
-      when: firewall_config.changed
+      when: firewall_stage.changed
       tags: [firewall]
     - name: Read explicit firewall confirmation state
       ansible.builtin.command: /usr/local/sbin/vpn-firewall status
@@ -57,5 +65,7 @@
       tags: [firewall]
     - name: Reject silent timeout rollback
       ansible.builtin.assert:
-        that: (firewall_status.stdout | from_json).status == 'confirmed'
+        that:
+          - (firewall_status.stdout | from_json).status == 'confirmed'
+          - not (firewall_status.stdout | from_json).needs_apply
         fail_msg: Firewall was not confirmed; retry staging and verify a new SSH connection.

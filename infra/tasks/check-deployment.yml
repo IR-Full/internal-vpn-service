@@ -1,0 +1,10 @@
+---
+- name: Require inventory and encrypted variables from the same deployment render
+  ansible.builtin.assert:
+    that:
+      - deployment_id is defined
+      - vault_deployment_id is defined
+      - deployment_id is match('^[0-9a-f]{32}$')
+      - deployment_id == vault_deployment_id
+    fail_msg: Render a fresh deployment bundle with vpnctl render and use its matching inventory and vault.
+  tags: [always, deployment-integrity]

@@ -34,6 +34,8 @@ def validate(data):
     check_key(data["private_key"])
     if not 1024 <= data["port"] <= 65535:
         raise ValueError("invalid port")
+    if data["port"] == 51821:
+        raise ValueError("port reserved for the management tunnel")
     if not 1280 <= data.get("mtu", 1380) <= 1420:
         raise ValueError("invalid MTU")
     net = ipaddress.ip_network(data["network"])
@@ -77,17 +79,25 @@ def write(path, content):
         with os.fdopen(fd, "w") as out:
             out.write(content); out.flush(); os.fsync(out.fileno())
         os.replace(tmp, path)
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     finally:
         if os.path.exists(tmp): os.unlink(tmp)
 
 
-def apply(data, state_dir=Path("/var/lib/vpn-service")):
-    validate(data)
+def apply(data, state_dir=Path("/var/lib/vpn-service"), *, boot_fallback=None):
     state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (state_dir / "apply.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         last_path = state_dir / "applied.json"
         previous = json.loads(last_path.read_text()) if last_path.exists() else None
+        if boot_fallback is not None:
+            # A rejected desired file must not prevent the accepted revision from booting.
+            data = previous if previous is not None else json.loads(boot_fallback.read_text())
+        validate(data)
         canonical = json.dumps(data, sort_keys=True)
         if previous and (previous["fleet_id"] != data["fleet_id"] or
                          previous["revision"] > data["revision"] or
@@ -118,7 +128,8 @@ def apply(data, state_dir=Path("/var/lib/vpn-service")):
             raise
         finally:
             conf.unlink(missing_ok=True)
-        write(last_path, canonical)
+        if previous != data:
+            write(last_path, canonical)
         digest = hashlib.sha256(canonical.encode()).hexdigest()
         # Readable acknowledgement deliberately excludes peer IDs, endpoints and credentials.
         write(state_dir / "ack.json", json.dumps({"fleet_id": data["fleet_id"], "revision": data["revision"], "digest": digest}))
@@ -133,10 +144,14 @@ def apply(data, state_dir=Path("/var/lib/vpn-service")):
 if __name__ == "__main__":
     os.umask(0o077)
     parser = argparse.ArgumentParser()
+    parser.add_argument("--boot", action="store_true", help="Start from the accepted checkpoint when one exists")
     parser.add_argument("config", type=Path)
     args = parser.parse_args()
     try:
-        changed = apply(json.loads(args.config.read_text()))
+        if args.boot:
+            changed = apply(None, boot_fallback=args.config)
+        else:
+            changed = apply(json.loads(args.config.read_text()))
         print(json.dumps({"changed": changed}))
     except Exception:
         print("VPN configuration rejected or failed; no credentials logged", file=sys.stderr)

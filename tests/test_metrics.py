@@ -14,7 +14,7 @@ metrics = importlib.util.module_from_spec(spec); spec.loader.exec_module(metrics
 
 
 class CertificateMetricsTests(unittest.TestCase):
-    def collected(self, failed=None):
+    def collected(self, failed=None, link_flags="0x81"):
         def run(argv, **kwargs):
             source = argv[0]
             if source == failed:
@@ -26,6 +26,10 @@ class CertificateMetricsTests(unittest.TestCase):
         def read(path, **kwargs):
             if path.name == "ack.json":
                 return "{}" if failed == "ack" else json.dumps({"revision": 4})
+            if path == Path("/sys/class/net/vpn0/flags"):
+                if failed == "link_flags":
+                    raise OSError("test-only unavailable link status")
+                return link_flags
             return "1700000000"
         with patch.object(metrics, "certificate_expiry", return_value=2000000000), \
                 patch.object(metrics.subprocess, "run", side_effect=run), \
@@ -33,6 +37,13 @@ class CertificateMetricsTests(unittest.TestCase):
                 patch.object(metrics.shutil, "disk_usage", return_value=SimpleNamespace(free=50, total=100)), \
                 patch.object(metrics.urllib.request, "urlopen", side_effect=OSError("test-only disconnected telemetry")):
             return metrics.collect({"node": "vpn_a", "backend": "wireguard"})
+
+    def test_wireguard_peer_output_does_not_imply_link_is_up(self):
+        self.assertEqual(self.collected()["vpn_interface_up"], 1)
+        down = self.collected(link_flags="0x80")
+        self.assertEqual(down["vpn_interface_up"], 0)
+        self.assertEqual(down["vpn_peers_configured"], 1)
+        self.assertEqual(self.collected(failed="link_flags")["vpn_interface_up"], 0)
 
     def test_security_probe_requires_readable_log_firewall_and_revision(self):
         healthy = self.collected()

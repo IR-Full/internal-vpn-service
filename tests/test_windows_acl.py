@@ -28,8 +28,7 @@ $target = $env:VPN_FLEET_ACL_TEST_PATH
 if ([IO.Directory]::Exists($target)) { $item = [IO.DirectoryInfo]::new($target) }
 else { $item = [IO.FileInfo]::new($target) }
 $acl = $item.GetAccessControl()
-$sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-[Console]::WriteLine('owner_sid=' + $sid)
+[Console]::WriteLine('owner_sid=' + $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value)
 [Console]::WriteLine('protected=' + $acl.AreAccessRulesProtected)
 foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
     [Console]::WriteLine(('{0}|{1}|{2}|{3}' -f $rule.IdentityReference.Value,

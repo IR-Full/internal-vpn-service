@@ -1,5 +1,6 @@
 import importlib.util
 from contextlib import contextmanager
+from io import StringIO
 import json
 from pathlib import Path
 import subprocess
@@ -57,6 +58,23 @@ class FirewallGuardTests(unittest.TestCase):
         with self.assertRaises(ValueError): firewall.execute("confirm")
         self.assertEqual(json.loads(self.status.read_text())["status"], "rolled_back")
         self.assertEqual(self.candidate.read_text(), RESCUE)
+
+    def test_boot_rejects_confirmation_of_candidate_that_is_no_longer_running(self):
+        self.stage()
+        firewall.execute("boot")
+        with self.assertRaises(ValueError):
+            firewall.execute("confirm")
+        with patch("sys.stdout", new_callable=StringIO) as output:
+            firewall.execute("status")
+        status = json.loads(output.getvalue())
+        self.assertEqual(status["status"], "rolled_back")
+        self.assertTrue(status["needs_apply"])
+        self.stage()
+        firewall.execute("confirm")
+        self.candidate.write_text(OTHER)
+        with patch("sys.stdout", new_callable=StringIO) as output:
+            firewall.execute("status")
+        self.assertTrue(json.loads(output.getvalue())["needs_apply"])
 
     def test_modified_candidate_cannot_be_confirmed(self):
         self.stage(); self.candidate.write_text(OTHER)

@@ -9,6 +9,8 @@ import subprocess
 import time
 import urllib.request
 
+IFF_UP = 0x1
+
 
 def certificate_expiry(path):
     try:
@@ -32,7 +34,9 @@ def collect(config):
         timestamps = [int(line.split()[1]) for line in result.stdout.splitlines() if line.strip()]
         metrics["vpn_peers_configured"] = len(timestamps)
         metrics["vpn_peers_recent_handshake"] = sum(0 < time.time() - t < 180 for t in timestamps)
-        metrics["vpn_interface_up"] = 1
+        # WireGuard exposes peer state even when the interface is administratively down.
+        flags = int(Path("/sys/class/net/vpn0/flags").read_text(), 16)
+        metrics["vpn_interface_up"] = int(bool(flags & IFF_UP))
     except Exception:
         metrics["vpn_interface_up"] = 0
     try:

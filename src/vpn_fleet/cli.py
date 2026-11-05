@@ -89,6 +89,7 @@ def main(argv=None) -> int:
                                               for k, d in state["devices"].items()]}, indent=2))
                 return 0
             elif args.command == "export":
+                r.validate_fleet(state["fleet"])
                 # A new private directory is required, so two-profile export cannot mix credentials.
                 if args.out.exists():
                     raise r.FleetError("Choose a NEW private output directory")

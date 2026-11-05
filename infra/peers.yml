@@ -5,6 +5,8 @@
   gather_facts: false
   vars:
     secrets_for_node: "{{ node_secrets[inventory_hostname] }}"
+  pre_tasks:
+    - ansible.builtin.import_tasks: tasks/check-deployment.yml
   tasks:
     - name: Write encrypted-in-transit desired credentials to root-only runtime configuration
       ansible.builtin.template:

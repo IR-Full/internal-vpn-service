@@ -47,6 +47,10 @@ if (($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
     throw 'Private directory must not be a reparse point'
 }
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent().User
+$sidType = [Security.Principal.SecurityIdentifier]
+if ($directory.GetAccessControl().GetOwner($sidType).Value -ne $identity.Value) {
+    throw 'Private directory must be owned by the current user'
+}
 $security = [Security.AccessControl.DirectorySecurity]::new()
 $security.SetAccessRuleProtection($true, $false)
 $rule = [Security.AccessControl.FileSystemAccessRule]::new(
@@ -57,8 +61,9 @@ $rule = [Security.AccessControl.FileSystemAccessRule]::new(
 $security.AddAccessRule($rule)
 $directory.SetAccessControl($security)
 $actual = $directory.GetAccessControl()
-$rules = @($actual.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
-if (-not $actual.AreAccessRulesProtected -or $rules.Count -ne 1 -or
+$rules = @($actual.GetAccessRules($true, $true, $sidType))
+if ($actual.GetOwner($sidType).Value -ne $identity.Value -or
+    -not $actual.AreAccessRulesProtected -or $rules.Count -ne 1 -or
     $rules[0].IdentityReference.Value -ne $identity.Value -or
     $rules[0].AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow -or
     $rules[0].FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl) {
@@ -73,7 +78,7 @@ if (-not $actual.AreAccessRulesProtected -or $rules.Count -ne 1 -or
                             base64.b64encode(script.encode("utf-16-le")).decode()],
                            env=environment, check=True, capture_output=True, timeout=30)
         except (OSError, subprocess.SubprocessError):
-            raise FleetError("Cannot enforce private Windows ACLs; use a local filesystem supporting protected ACLs") from None
+            raise FleetError("Cannot enforce private Windows ACLs; use a directory you own on a local filesystem supporting protected ACLs") from None
     else:
         path.chmod(0o700)
 
@@ -130,7 +135,7 @@ def identifier(value: str) -> str:
     return value
 
 
-def validate_fleet(fleet: dict) -> dict:
+def validate_fleet(fleet: dict, *, allow_legacy_management_port: bool = False) -> dict:
     if set(fleet) != {"nodes", "admin_cidrs", "admin_public_key"}:
         raise FleetError("Fleet requires nodes, admin_cidrs and admin_public_key only")
     nodes = fleet["nodes"]
@@ -153,6 +158,8 @@ def validate_fleet(fleet: dict) -> dict:
             raise FleetError("User network overlaps the management network")
         if not isinstance(n.get("port"), int) or not 1024 <= n["port"] <= 65535:
             raise FleetError("VPN UDP port must be between 1024 and 65535")
+        if n["port"] == 51821 and not allow_legacy_management_port:
+            raise FleetError("UDP port 51821 is reserved for the management tunnel")
         if not isinstance(n.get("mtu", 1380), int) or not 1280 <= n.get("mtu", 1380) <= 1420:
             raise FleetError("Use an MTU between 1280 and 1420; default is 1380")
         if n.get("backend", "wireguard") not in ("wireguard", "amneziawg"):
@@ -282,7 +289,8 @@ def decrypt(data: bytes, password: str) -> dict:
         state = json.loads(AESGCM(key).decrypt(nonce, bytes.fromhex(envelope["ciphertext"]), AAD))
         if state["schema"] != 1:
             raise ValueError
-        validate_fleet(state["fleet"])
+        # Keep existing registries readable so set-fleet can repair the reserved port.
+        validate_fleet(state["fleet"], allow_legacy_management_port=True)
         return state
     except (KeyError, ValueError, TypeError, InvalidTag):
         raise FleetError("Cannot open registry: incorrect passphrase, unsupported format or damaged data") from None

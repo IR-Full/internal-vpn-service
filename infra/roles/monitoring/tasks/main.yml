@@ -165,14 +165,6 @@
       RestartSec=5s
   when: monitoring_node | bool
 
-- name: Activate gateway
-  ansible.builtin.systemd_service:
-    name: nginx
-    enabled: true
-    state: "{{ 'restarted' if telemetry_gateway.changed or telemetry_credentials.changed else 'started' }}"
-    daemon_reload: true
-  when: monitoring_node | bool
-
 - name: Stop unused web server on A
   ansible.builtin.systemd_service:
     name: nginx
@@ -197,13 +189,67 @@
   ansible.builtin.command: docker compose -f /opt/vpn-monitoring/compose.yml config --quiet
   changed_when: false
 
+- name: Compare installed monitoring inputs with the last activated generation
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import hashlib
+        import json
+        from pathlib import Path
+        import sys
+
+        root = Path("/opt/vpn-monitoring")
+        secrets = Path("/etc/vpn-service")
+        files = [root / "compose.yml", *sorted(p for p in (root / "config").rglob("*") if p.is_file())]
+        files.extend(secrets / name for name in ("telemetry-ca.pem", "telemetry-cert.pem", "telemetry-key.pem"))
+        if sys.argv[1] == "b":
+            files.append(Path("/etc/nginx/conf.d/vpn-telemetry.conf"))
+            files.extend(secrets / name for name in ("grafana-password", "grafana-secret-key"))
+            if sys.argv[2] == "smtp":
+                files.extend(secrets / ("smtp-" + name) for name in ("host", "user", "password", "from"))
+        generation = hashlib.sha256()
+        for path in files:
+            generation.update(str(path).encode() + b"\0")
+            generation.update(hashlib.sha256(path.read_bytes()).digest())
+        expected = generation.hexdigest()
+        marker = Path("/var/lib/vpn-service/monitoring-generation.sha256")
+        try:
+            activated = marker.read_text(encoding="ascii").strip()
+        except (FileNotFoundError, UnicodeDecodeError):
+            activated = ""
+        print(json.dumps({"digest": expected, "matches": activated == expected}))
+      - "{{ (monitoring_node | bool) | ternary('b', 'a') }}"
+      - "{{ (alerting_settings.enabled | default(false) | bool) | ternary('smtp', 'off') }}"
+  register: monitoring_generation
+  changed_when: false
+  check_mode: false
+  no_log: true
+
+- name: Activate gateway
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: "{{ 'restarted' if telemetry_gateway.changed or telemetry_credentials.changed or not (monitoring_generation.stdout | from_json).matches else 'started' }}"
+    daemon_reload: true
+  when: monitoring_node | bool
+
 - name: Start monitoring containers
   ansible.builtin.command:
     argv: "{{ ['docker', 'compose', '-f', '/opt/vpn-monitoring/compose.yml', 'up', '-d', '--remove-orphans'] + (['--force-recreate'] if monitoring_recreate else []) }}"
   vars:
-    monitoring_recreate: "{{ telemetry_credentials.changed or alloy_config.changed or grafana_plugins_config.changed or grafana_credentials.changed or monitoring_files.changed or contacts_config.changed or smtp_config.changed or monitoring_compose.changed }}"
+    monitoring_recreate: "{{ telemetry_credentials.changed or alloy_config.changed or grafana_plugins_config.changed or grafana_credentials.changed or monitoring_files.changed or contacts_config.changed or smtp_config.changed or monitoring_compose.changed or not (monitoring_generation.stdout | from_json).matches }}"
   register: compose_up
   changed_when: "'Started' in compose_up.stderr or 'Created' in compose_up.stderr or 'Recreated' in compose_up.stderr"
+
+- name: Check that Alloy loaded the configuration on both nodes
+  ansible.builtin.uri:
+    url: http://127.0.0.1:12345/-/ready
+  register: alloy_health
+  retries: 20
+  delay: 3
+  until: alloy_health.status == 200
 
 - name: Check local Grafana health
   ansible.builtin.uri:
@@ -213,3 +259,14 @@
   delay: 3
   until: grafana_health.status == 200
   when: monitoring_node | bool
+
+# Keep the old generation if file updates, activation, or readiness were interrupted.
+# On the next run, unchanged copied files still need activation until this matches.
+- name: Record activated monitoring generation
+  ansible.builtin.copy:
+    content: "{{ (monitoring_generation.stdout | from_json).digest }}\n"
+    dest: /var/lib/vpn-service/monitoring-generation.sha256
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true

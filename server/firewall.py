@@ -155,11 +155,18 @@ def execute(command):
         atomic_write(status_path, json.dumps({"status": "rolled_back", "digest": digest(), "rescue": rescue}))
         print("Firewall rolled back")
     elif command == "boot":
-        _, rescue = load_checkpoint(good)
+        policy, rescue = load_checkpoint(good)
         if rescue:
             atomic_write(status_path, json.dumps({"status": "rescue"}))
+        elif read_status(status_path).get("status") == "pending":
+            # The transient rollback timer does not survive a reboot.
+            atomic_write(status_path, json.dumps({"status": "rolled_back",
+                                                  "digest": hashlib.sha256(policy.encode()).hexdigest(),
+                                                  "rescue": False}))
     elif command == "status":
-        print(status_path.read_text() if status_path.exists() else '{"status":"unconfirmed"}')
+        status = read_status(status_path) or {"status": "unconfirmed"}
+        status["needs_apply"] = status.get("status") != "confirmed" or status.get("digest") != digest()
+        print(json.dumps(status))
     else:
         raise SystemExit("Expected apply, confirm, rollback, boot or status")
 
